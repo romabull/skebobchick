@@ -143,7 +143,36 @@ app.get('/api/me', (req, res) => {
         res.status(401).json({ error: 'Не авторизован' });
     }
 });
+app.get('/style.css', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'style.css'));
+});
 
+app.get('/script.js', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'script.js'));
+});
+
+app.get('/admin.js', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'admin.js'));
+});
+
+app.get('/admin.css', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'admin.css'));
+});
+
+// Главная страница
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Админская страница
+app.get('/admin', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
+
+// Все остальные маршруты - index.html (для SPA)
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 // ============ ТЕСТЫ ============
 
 app.get('/api/tests', (req, res) => {
