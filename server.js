@@ -4,7 +4,6 @@ const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
 const path = require('path');
 const cors = require('cors');
-const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -19,10 +18,14 @@ app.use(cors({
     credentials: true
 }));
 
-// ============ СТАТИЧЕСКИЕ ФАЙЛЫ ============
-// Сначала проверяем в папке public, потом в корне
+// ============ ВАЖНО: Статика ПЕРЕД всеми маршрутами ============
 app.use(express.static(path.join(__dirname, 'public')));
-app.use(express.static(__dirname)); // Добавляем корневую папку
+
+// Логирование
+app.use((req, res, next) => {
+    console.log(`📝 ${req.method} ${req.url}`);
+    next();
+});
 
 // ============ БАЗА ДАННЫХ ============
 const db = {
@@ -54,12 +57,6 @@ async function initTestUser() {
     };
     console.log('✅ Тестовый пользователь: user / user123');
 }
-
-// Логирование
-app.use((req, res, next) => {
-    console.log(`📝 ${req.method} ${req.url}`);
-    next();
-});
 
 // ============ АВТОРИЗАЦИЯ ============
 
@@ -338,23 +335,14 @@ app.get('/api/admin/stats', (req, res) => {
 });
 
 // ============ СТРАНИЦЫ ============
-// Отдаём HTML страницы
-app.get('/', (req, res) => {
-    const indexPath = path.join(__dirname, 'public', 'index.html');
-    if (fs.existsSync(indexPath)) {
-        res.sendFile(indexPath);
-    } else {
-        res.sendFile(path.join(__dirname, 'index.html'));
-    }
-});
 
 app.get('/admin', (req, res) => {
-    const adminPath = path.join(__dirname, 'public', 'admin.html');
-    if (fs.existsSync(adminPath)) {
-        res.sendFile(adminPath);
-    } else {
-        res.sendFile(path.join(__dirname, 'admin.html'));
-    }
+    res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
+
+// Все остальные маршруты - index.html
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // ============ ЗАПУСК ============
@@ -408,16 +396,18 @@ async function startServer() {
         createdBy: 'admin'
     };
     
-    app.listen(PORT, () => {
-        console.log(`\n🚀 Сервер запущен на http://localhost:${PORT}`);
-        console.log('\n👤 Доступные аккаунты:');
-        console.log('   📋 Администратор: admin / admin123');
-        console.log('   📋 Пользователь: user / user123');
-        console.log(`\n🌐 Откройте http://localhost:${PORT}`);
-    });
+    if (process.env.NODE_ENV !== 'production') {
+        app.listen(PORT, () => {
+            console.log(`\n🚀 Сервер запущен на http://localhost:${PORT}`);
+            console.log('\n👤 Доступные аккаунты:');
+            console.log('   📋 Администратор: admin / admin123');
+            console.log('   📋 Пользователь: user / user123');
+            console.log(`\n🌐 Откройте http://localhost:${PORT}`);
+        });
+    }
 }
 
-// Для Vercel
+// Экспорт для Vercel
 if (process.env.NODE_ENV === 'production') {
     module.exports = app;
 }
