@@ -6,18 +6,116 @@
 
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     min-height: 100vh;
     padding: 20px;
+    position: relative;
+    overflow-x: hidden;
+    background: #0a0a2a;
 }
 
+/* ============ 🎨 ФОН С КВАДРАТИКАМИ ============ */
+#background-squares {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.square {
+    position: absolute;
+    width: 60px;
+    height: 60px;
+    background: rgba(102, 126, 234, 0.1);
+    border: 1px solid rgba(102, 126, 234, 0.15);
+    border-radius: 8px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    opacity: 0;
+    transform: scale(0.8);
+}
+
+.square.visible {
+    opacity: 1;
+    transform: scale(1);
+    background: rgba(102, 126, 234, 0.3);
+    border-color: rgba(102, 126, 234, 0.6);
+    box-shadow: 0 0 30px rgba(102, 126, 234, 0.3);
+}
+
+.square:hover {
+    background: rgba(102, 126, 234, 0.5) !important;
+    border-color: #667eea !important;
+    box-shadow: 0 0 50px rgba(102, 126, 234, 0.5) !important;
+    transform: scale(1.1) !important;
+}
+
+/* Разные размеры квадратиков */
+.square.small {
+    width: 30px;
+    height: 30px;
+}
+
+.square.medium {
+    width: 50px;
+    height: 50px;
+}
+
+.square.large {
+    width: 80px;
+    height: 80px;
+}
+
+/* Цвета квадратиков */
+.square.color-1 {
+    background: rgba(102, 126, 234, 0.1);
+    border-color: rgba(102, 126, 234, 0.2);
+}
+.square.color-1.visible {
+    background: rgba(102, 126, 234, 0.3);
+    border-color: rgba(102, 126, 234, 0.6);
+}
+
+.square.color-2 {
+    background: rgba(118, 75, 162, 0.1);
+    border-color: rgba(118, 75, 162, 0.2);
+}
+.square.color-2.visible {
+    background: rgba(118, 75, 162, 0.3);
+    border-color: rgba(118, 75, 162, 0.6);
+}
+
+.square.color-3 {
+    background: rgba(237, 137, 54, 0.1);
+    border-color: rgba(237, 137, 54, 0.2);
+}
+.square.color-3.visible {
+    background: rgba(237, 137, 54, 0.3);
+    border-color: rgba(237, 137, 54, 0.6);
+}
+
+.square.color-4 {
+    background: rgba(72, 187, 120, 0.1);
+    border-color: rgba(72, 187, 120, 0.2);
+}
+.square.color-4.visible {
+    background: rgba(72, 187, 120, 0.3);
+    border-color: rgba(72, 187, 120, 0.6);
+}
+
+/* ============ КОНТЕЙНЕР ============ */
 .container {
     max-width: 1000px;
     margin: 0 auto;
-    background: white;
+    background: rgba(255, 255, 255, 0.95);
     border-radius: 20px;
     padding: 30px;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    position: relative;
+    z-index: 1;
+    backdrop-filter: blur(10px);
 }
 
 /* Auth styles */
@@ -412,118 +510,6 @@ header {
 .question-editor {
     background: #f7fafc;
     border-radius: 10px;
-    padding: 15px;
-    margin-bottom: 15px;
-    border: 2px solid #e2e8f0;
-}
-
-.question-editor .form-group {
-    margin-bottom: 10px;
-}
-
-.question-editor .options-editor {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-}
-
-.question-editor .options-editor input {
-    padding: 8px 12px;
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
-}
-
-.question-editor .remove-question {
-    margin-top: 10px;
-    background: #fc8181;
-    color: white;
-    border: none;
-    padding: 5px 15px;
-    border-radius: 6px;
-    cursor: pointer;
-}
-
-.question-editor .remove-question:hover {
-    background: #f56565;
-}
-
-.auth-footer {
-    margin-top: 20px;
-    color: #a0aec0;
-}
-
-@media (max-width: 600px) {
-    .container {
-        padding: 15px;
-    }
-    
-    .header-content {
-        flex-direction: column;
-        align-items: stretch;
-        text-align: center;
-    }
-    
-    .user-info {
-        justify-content: center;
-    }
-    
-    .navigation {
-        flex-direction: column;
-    }
-    
-    .btn-nav, .btn-primary {
-        width: 100%;
-    }
-    
-    .question-editor .options-editor {
-        grid-template-columns: 1fr;
-    }
-    
-    .test-card-header {
-        flex-direction: column;
-        align-items: stretch;
-    }
-}
-/* Admin tabs */
-.admin-tabs {
-    display: flex;
-    gap: 10px;
-    margin-top: 15px;
-    flex-wrap: wrap;
-}
-
-.tab-btn {
-    padding: 8px 20px;
-    background: #edf2f7;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    font-size: 15px;
-    transition: all 0.3s;
-}
-
-.tab-btn:hover {
-    background: #e2e8f0;
-}
-
-.tab-btn.active {
-    background: #667eea;
-    color: white;
-}
-
-.tab-content {
-    display: none;
-    padding-top: 20px;
-}
-
-.tab-content.active {
-    display: block;
-}
-
-/* Question editor */
-.question-editor {
-    background: #f7fafc;
-    border-radius: 10px;
     padding: 20px;
     margin-bottom: 15px;
     border: 2px solid #e2e8f0;
@@ -599,32 +585,204 @@ header {
     margin-top: 5px;
 }
 
-.test-card .actions {
+/* ============ 🏆 ТАБЛИЦА ЛИДЕРОВ ============ */
+.leaderboard-item {
     display: flex;
-    gap: 10px;
+    align-items: center;
+    padding: 15px 20px;
+    background: #f7fafc;
+    border-radius: 12px;
+    margin-bottom: 10px;
+    border: 2px solid #e2e8f0;
+    transition: all 0.3s;
 }
 
-.btn-danger {
-    background: #fc8181;
-    color: white;
-    border: none;
+.leaderboard-item:hover {
+    border-color: #667eea;
+    transform: translateX(5px);
+    background: #ebf4ff;
 }
 
-.btn-danger:hover {
-    background: #f56565;
+.leaderboard-item .rank {
+    font-size: 1.5em;
+    font-weight: 700;
+    color: #667eea;
+    min-width: 60px;
+}
+
+.leaderboard-item .rank.gold {
+    color: #f6ad55;
+}
+
+.leaderboard-item .rank.silver {
+    color: #a0aec0;
+}
+
+.leaderboard-item .rank.bronze {
+    color: #ed8936;
+}
+
+.leaderboard-item .info {
+    flex: 1;
+    margin: 0 15px;
+}
+
+.leaderboard-item .info .name {
+    font-weight: 600;
+    color: #2d3748;
+    font-size: 1.1em;
+}
+
+.leaderboard-item .info .details {
+    font-size: 14px;
+    color: #718096;
+}
+
+.leaderboard-item .score {
+    font-size: 1.8em;
+    font-weight: 700;
+    color: #667eea;
+}
+
+.leaderboard-item .score.excellent {
+    color: #48bb78;
+}
+
+.leaderboard-item .score.good {
+    color: #ed8936;
+}
+
+.leaderboard-item .score.poor {
+    color: #fc8181;
+}
+
+/* Auth footer */
+.auth-footer {
+    margin-top: 20px;
+    color: #a0aec0;
 }
 
 /* Responsive */
 @media (max-width: 600px) {
+    .container {
+        padding: 15px;
+    }
+    
+    .header-content {
+        flex-direction: column;
+        align-items: stretch;
+        text-align: center;
+    }
+    
+    .user-info {
+        justify-content: center;
+    }
+    
+    .navigation {
+        flex-direction: column;
+    }
+    
+    .btn-nav, .btn-primary {
+        width: 100%;
+    }
+    
     .question-editor .options-editor {
         grid-template-columns: 1fr;
     }
     
-    .admin-tabs {
+    .test-card-header {
         flex-direction: column;
+        align-items: stretch;
     }
     
-    .tab-btn {
-        width: 100%;
+    .leaderboard-item {
+        flex-direction: column;
+        text-align: center;
     }
+    
+    .leaderboard-item .rank {
+        margin-bottom: 5px;
+    }
+}
+/* ============ 🎨 ФОН С КВАДРАТИКАМИ ============ */
+#background-squares {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.square {
+    position: absolute;
+    width: 40px;
+    height: 40px;
+    background: rgba(102, 126, 234, 0.15);
+    border: 1px solid rgba(102, 126, 234, 0.2);
+    border-radius: 8px;
+    opacity: 0;
+    transform: scale(0.5) rotate(0deg);
+    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    pointer-events: none;
+}
+
+.square.active {
+    opacity: 1 !important;
+    transform: scale(1) rotate(0deg) !important;
+    background: rgba(102, 126, 234, 0.3) !important;
+    border-color: rgba(102, 126, 234, 0.6) !important;
+    box-shadow: 0 0 30px rgba(102, 126, 234, 0.2) !important;
+}
+
+/* Разные размеры квадратиков */
+.square.size-1 {
+    width: 25px;
+    height: 25px;
+}
+
+.square.size-2 {
+    width: 40px;
+    height: 40px;
+}
+
+.square.size-3 {
+    width: 55px;
+    height: 55px;
+}
+
+.square.size-4 {
+    width: 70px;
+    height: 70px;
+}
+
+/* Цвета квадратиков */
+.square.color-1 {
+    background: rgba(102, 126, 234, 0.1);
+    border-color: rgba(102, 126, 234, 0.15);
+}
+
+.square.color-2 {
+    background: rgba(118, 75, 162, 0.1);
+    border-color: rgba(118, 75, 162, 0.15);
+}
+
+.square.color-3 {
+    background: rgba(237, 137, 54, 0.1);
+    border-color: rgba(237, 137, 54, 0.15);
+}
+
+.square.color-4 {
+    background: rgba(72, 187, 120, 0.1);
+    border-color: rgba(72, 187, 120, 0.15);
+}
+
+/* Эффект при наведении на квадратик */
+.square.hover-effect {
+    background: rgba(102, 126, 234, 0.5) !important;
+    border-color: #667eea !important;
+    box-shadow: 0 0 50px rgba(102, 126, 234, 0.4) !important;
+    transform: scale(1.2) rotate(5deg) !important;
 }

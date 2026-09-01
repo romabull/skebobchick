@@ -5,7 +5,7 @@ let currentTest = null;
 let currentQuestionIndex = 0;
 let userAnswers = {};
 let currentTestId = null;
-let questionCounterAdmin = 0; // Переименовали, чтобы избежать конфликта
+let questionCounterAdmin = 0;
 
 // DOM элементы
 const authPage = document.getElementById('authPage');
@@ -36,6 +36,126 @@ const addQuestionBtn = document.getElementById('addQuestionBtn');
 const questionsList = document.getElementById('questionsList');
 const statsContent = document.getElementById('statsContent');
 const myResultsContent = document.getElementById('myResultsContent');
+const leaderboardContent = document.getElementById('leaderboardContent');
+
+// ============ 🎨 ФОН С КВАДРАТИКАМИ ============
+function createSquares() {
+    const container = document.getElementById('background-squares');
+    const colors = ['color-1', 'color-2', 'color-3', 'color-4'];
+    const sizes = ['size-1', 'size-2', 'size-3', 'size-4'];
+    const count = 80;
+    const squares = [];
+    
+    // Создаем квадратики
+    for (let i = 0; i < count; i++) {
+        const square = document.createElement('div');
+        square.className = `square ${sizes[Math.floor(Math.random() * sizes.length)]} ${colors[Math.floor(Math.random() * colors.length)]}`;
+        
+        // Случайная позиция
+        square.style.left = Math.random() * 100 + '%';
+        square.style.top = Math.random() * 100 + '%';
+        
+        // Случайное вращение
+        square.style.transform = `rotate(${Math.random() * 360}deg)`;
+        
+        container.appendChild(square);
+        squares.push(square);
+    }
+    
+    // Переменные для отслеживания мыши
+    let mouseX = -1000;
+    let mouseY = -1000;
+    let animationId = null;
+    let isMouseOnScreen = false;
+    
+    // Функция обновления квадратиков
+    function updateSquares() {
+        const radius = 200; // Радиус появления квадратиков
+        
+        squares.forEach((square, index) => {
+            const rect = square.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            
+            // Расстояние от мыши до центра квадратика
+            const dx = mouseX - centerX;
+            const dy = mouseY - centerY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            // Если мышь на экране и квадратик в радиусе
+            if (isMouseOnScreen && distance < radius) {
+                // Чем ближе к мыши, тем ярче
+                const intensity = 1 - (distance / radius);
+                square.classList.add('active');
+                square.style.opacity = 0.2 + intensity * 0.8;
+                square.style.transform = `scale(${0.8 + intensity * 0.4}) rotate(${intensity * 10}deg)`;
+                square.style.boxShadow = `0 0 ${30 + intensity * 40}px rgba(102, 126, 234, ${0.1 + intensity * 0.3})`;
+                
+                // Меняем цвет в зависимости от расстояния
+                if (intensity > 0.7) {
+                    square.style.background = 'rgba(102, 126, 234, 0.5)';
+                    square.style.borderColor = 'rgba(102, 126, 234, 0.8)';
+                } else if (intensity > 0.4) {
+                    square.style.background = 'rgba(102, 126, 234, 0.3)';
+                    square.style.borderColor = 'rgba(102, 126, 234, 0.5)';
+                } else {
+                    square.style.background = 'rgba(102, 126, 234, 0.15)';
+                    square.style.borderColor = 'rgba(102, 126, 234, 0.3)';
+                }
+            } else {
+                // Если мышь убрали или квадратик далеко - скрываем
+                square.classList.remove('active');
+                square.style.opacity = '0';
+                square.style.transform = `scale(0.5) rotate(0deg)`;
+                square.style.boxShadow = 'none';
+            }
+        });
+        
+        animationId = requestAnimationFrame(updateSquares);
+    }
+    
+    // Отслеживаем движение мыши
+    document.addEventListener('mousemove', (e) => {
+        mouseX = e.clientX;
+        mouseY = e.clientY;
+        isMouseOnScreen = true;
+        
+        if (!animationId) {
+            updateSquares();
+        }
+    });
+    
+    // Когда мышь покидает окно
+    document.addEventListener('mouseleave', () => {
+        isMouseOnScreen = false;
+        mouseX = -1000;
+        mouseY = -1000;
+        
+        // Плавно скрываем все квадратики
+        squares.forEach(square => {
+            square.classList.remove('active');
+            square.style.opacity = '0';
+            square.style.transform = `scale(0.5) rotate(0deg)`;
+            square.style.boxShadow = 'none';
+        });
+        
+        if (animationId) {
+            cancelAnimationFrame(animationId);
+            animationId = null;
+        }
+    });
+    
+    // Оптимизация: обновляем при скролле
+    let scrollTimeout;
+    window.addEventListener('scroll', () => {
+        clearTimeout(scrollTimeout);
+        scrollTimeout = setTimeout(() => {
+            // Пересчитываем позиции квадратиков
+        }, 100);
+    });
+}
+
+// ============ ОСТАЛЬНОЙ КОД ============
 
 // Проверка авторизации
 async function checkAuth() {
@@ -48,6 +168,7 @@ async function checkAuth() {
             showMainPage();
             loadTests();
             loadMyResults();
+            loadLeaderboard();
             if (currentRole === 'admin') {
                 loadStats();
             }
@@ -75,7 +196,6 @@ function showMainPage() {
     userRoleEl.textContent = currentRole === 'admin' ? 'Админ' : 'Пользователь';
     userRoleEl.className = `role-tag ${currentRole}`;
     
-    // Показываем нужную навигацию
     if (currentRole === 'admin') {
         adminNav.style.display = 'flex';
         userNav.style.display = 'none';
@@ -162,7 +282,6 @@ async function startTest(testId) {
     }
 }
 
-// Удаление теста (админ)
 async function deleteTest(testId) {
     if (!confirm('Удалить этот тест?')) return;
     
@@ -174,13 +293,13 @@ async function deleteTest(testId) {
         if (response.ok) {
             loadTests();
             loadStats();
+            loadLeaderboard();
         }
     } catch (error) {
         alert('Ошибка удаления');
     }
 }
 
-// Рендер вопроса
 function renderQuestion() {
     if (!currentTest) return;
     
@@ -263,7 +382,6 @@ function prevQuestion() {
     }
 }
 
-// Отправка теста
 async function submitTest() {
     const allAnswered = currentTest.questions.every((_, index) => 
         userAnswers[index] !== undefined
@@ -287,6 +405,7 @@ async function submitTest() {
             const results = await response.json();
             showResults(results);
             loadMyResults();
+            loadLeaderboard();
         }
     } catch (error) {
         alert('Ошибка проверки теста');
@@ -329,7 +448,6 @@ function showResults(results) {
     document.getElementById('resultsContent').innerHTML = html;
 }
 
-// Мои результаты
 async function loadMyResults() {
     try {
         const response = await fetch('/api/results');
@@ -370,7 +488,66 @@ function renderMyResults(results) {
     `).join('');
 }
 
-// Создание теста (админ)
+// ============ 🏆 ТАБЛИЦА ЛИДЕРОВ ============
+
+async function loadLeaderboard() {
+    try {
+        const response = await fetch('/api/leaderboard');
+        if (response.ok) {
+            const data = await response.json();
+            renderLeaderboard(data);
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки таблицы лидеров:', error);
+    }
+}
+
+function renderLeaderboard(leaderboard) {
+    if (!leaderboard || leaderboard.length === 0) {
+        leaderboardContent.innerHTML = `
+            <div style="text-align: center; padding: 40px; color: #718096;">
+                <p>🏆 Пока нет результатов</p>
+                <p style="font-size: 14px;">Пройдите тест, чтобы попасть в таблицу лидеров!</p>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = '';
+    leaderboard.forEach((item, index) => {
+        const rank = index + 1;
+        let rankClass = '';
+        if (rank === 1) rankClass = 'gold';
+        else if (rank === 2) rankClass = 'silver';
+        else if (rank === 3) rankClass = 'bronze';
+        
+        let scoreClass = '';
+        if (item.bestScore >= 80) scoreClass = 'excellent';
+        else if (item.bestScore >= 60) scoreClass = 'good';
+        else scoreClass = 'poor';
+        
+        const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`;
+        
+        html += `
+            <div class="leaderboard-item">
+                <div class="rank ${rankClass}">${medal}</div>
+                <div class="info">
+                    <div class="name">${item.username}</div>
+                    <div class="details">
+                        Лучший результат: ${item.bestTest} • Пройдено тестов: ${item.totalTests}
+                        ${item.completedAt ? ` • ${new Date(item.completedAt).toLocaleDateString()}` : ''}
+                    </div>
+                </div>
+                <div class="score ${scoreClass}">${item.bestScore}%</div>
+            </div>
+        `;
+    });
+    
+    leaderboardContent.innerHTML = html;
+}
+
+// ============ СОЗДАНИЕ ТЕСТА ============
+
 createForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     
@@ -412,6 +589,7 @@ createForm.addEventListener('submit', async (e) => {
             questionCounterAdmin = 0;
             loadTests();
             loadStats();
+            loadLeaderboard();
             switchTab('tests');
         } else {
             const data = await response.json();
@@ -422,7 +600,6 @@ createForm.addEventListener('submit', async (e) => {
     }
 });
 
-// Добавление вопроса
 addQuestionBtn.addEventListener('click', () => {
     questionCounterAdmin++;
     const html = `
@@ -447,7 +624,6 @@ addQuestionBtn.addEventListener('click', () => {
     questionsList.insertAdjacentHTML('beforeend', html);
 });
 
-// Статистика (админ)
 async function loadStats() {
     try {
         const response = await fetch('/api/admin/stats');
@@ -485,7 +661,6 @@ function renderStats(stats) {
     `;
 }
 
-// Переключение вкладок
 document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
         const tab = btn.dataset.tab;
@@ -503,13 +678,12 @@ function switchTab(tab) {
         content.classList.add('active');
     }
     
-    // Загружаем данные для вкладок
     if (tab === 'stats') loadStats();
     if (tab === 'myresults') loadMyResults();
     if (tab === 'tests') loadTests();
+    if (tab === 'leaderboard') loadLeaderboard();
 }
 
-// Авторизация
 async function login() {
     const username = usernameInput.value.trim();
     const password = passwordInput.value.trim();
@@ -534,6 +708,7 @@ async function login() {
             showMainPage();
             loadTests();
             loadMyResults();
+            loadLeaderboard();
             if (currentRole === 'admin') {
                 loadStats();
             }
@@ -588,7 +763,6 @@ async function logout() {
     }
 }
 
-// Обработчики
 loginBtn.addEventListener('click', login);
 registerBtn.addEventListener('click', register);
 logoutBtn.addEventListener('click', logout);
@@ -604,12 +778,12 @@ backToTestsBtn.addEventListener('click', () => {
     loadTests();
 });
 
-// Enter для входа
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && authPage.style.display !== 'none') {
         login();
     }
 });
 
-// Запуск
+// ============ ЗАПУСК ============
+createSquares();
 checkAuth();

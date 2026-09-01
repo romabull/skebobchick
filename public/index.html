@@ -7,6 +7,9 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <!-- 🎨 Квадратики на фоне -->
+    <div id="background-squares"></div>
+
     <div id="app">
         <!-- Страница входа -->
         <div id="authPage" class="container">
@@ -47,11 +50,13 @@
                     <button class="tab-btn" data-tab="create">➕ Создать тест</button>
                     <button class="tab-btn" data-tab="stats">📊 Статистика</button>
                     <button class="tab-btn" data-tab="myresults">📈 Мои результаты</button>
+                    <button class="tab-btn" data-tab="leaderboard">🏆 Лидеры</button>
                 </div>
                 <!-- Навигация для пользователя -->
                 <div id="userNav" style="display: none;" class="admin-tabs">
                     <button class="tab-btn active" data-tab="tests">📝 Доступные тесты</button>
                     <button class="tab-btn" data-tab="myresults">📈 Мои результаты</button>
+                    <button class="tab-btn" data-tab="leaderboard">🏆 Лидеры</button>
                 </div>
             </header>
 
@@ -95,6 +100,12 @@
             <div id="tab-myresults" class="tab-content">
                 <h2>📈 Мои результаты</h2>
                 <div id="myResultsContent"></div>
+            </div>
+
+            <!-- Вкладка: Таблица лидеров -->
+            <div id="tab-leaderboard" class="tab-content">
+                <h2>🏆 Таблица лидеров</h2>
+                <div id="leaderboardContent"></div>
             </div>
         </div>
 

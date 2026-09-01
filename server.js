@@ -18,7 +18,7 @@ app.use(cors({
     credentials: true
 }));
 
-// ============ ВАЖНО: Статика ПЕРЕД всеми маршрутами ============
+// Статика
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Логирование
@@ -334,13 +334,46 @@ app.get('/api/admin/stats', (req, res) => {
     }
 });
 
+// ============ 🏆 ТАБЛИЦА ЛИДЕРОВ ============
+
+app.get('/api/leaderboard', (req, res) => {
+    try {
+        const leaderboard = [];
+        
+        // Собираем все результаты
+        Object.keys(db.results).forEach(username => {
+            const userResults = db.results[username];
+            if (userResults && userResults.length > 0) {
+                // Находим лучший результат пользователя (по проценту)
+                const bestResult = userResults.reduce((best, current) => {
+                    return (current.percentage > best.percentage) ? current : best;
+                }, userResults[0]);
+                
+                leaderboard.push({
+                    username: username,
+                    bestScore: bestResult.percentage,
+                    totalTests: userResults.length,
+                    bestTest: bestResult.testTitle,
+                    completedAt: bestResult.completedAt
+                });
+            }
+        });
+        
+        // Сортируем по убыванию процента
+        leaderboard.sort((a, b) => b.bestScore - a.bestScore);
+        
+        res.json(leaderboard);
+    } catch (error) {
+        res.status(500).json({ error: 'Ошибка получения таблицы лидеров' });
+    }
+});
+
 // ============ СТРАНИЦЫ ============
 
 app.get('/admin', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
-// Все остальные маршруты - index.html
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
@@ -407,7 +440,6 @@ async function startServer() {
     }
 }
 
-// Экспорт для Vercel
 if (process.env.NODE_ENV === 'production') {
     module.exports = app;
 }
