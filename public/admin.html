@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Админ панель - Физика</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app">
+        <div id="adminPanel" class="container" style="display: none;">
+            <header>
+                <div class="header-content">
+                    <h1>⚙️ Панель администратора</h1>
+                    <div class="user-info">
+                        <span id="adminUser"></span>
+                        <button id="logoutBtn" class="btn-small">Выйти</button>
+                    </div>
+                </div>
+                <div class="admin-tabs">
+                    <button class="tab-btn active" data-tab="tests">📝 Тесты</button>
+                    <button class="tab-btn" data-tab="create">➕ Создать тест</button>
+                    <button class="tab-btn" data-tab="stats">📊 Статистика</button>
+                </div>
+            </header>
+
+            <div id="tab-tests" class="tab-content active">
+                <div id="testsList"></div>
+            </div>
+
+            <div id="tab-create" class="tab-content">
+                <h2>Создать новый тест</h2>
+                <form id="createTestForm">
+                    <div class="form-group">
+                        <label>Название теста</label>
+                        <input type="text" id="testTitle" placeholder="Введите название" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Описание</label>
+                        <textarea id="testDescription" placeholder="Краткое описание"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Класс</label>
+                        <input type="text" id="testClass" placeholder="7-8" value="7-8">
+                    </div>
+                    <div id="questionsEditor">
+                        <h3>Вопросы</h3>
+                        <div id="questionsList"></div>
+                        <button type="button" id="addQuestionBtn" class="btn-secondary">+ Добавить вопрос</button>
+                    </div>
+                    <button type="submit" class="btn-primary">Создать тест</button>
+                </form>
+            </div>
+
+            <div id="tab-stats" class="tab-content">
+                <h2>📊 Статистика платформы</h2>
+                <div id="statsContent"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="admin.js"></script>
+</body>
+</html>
