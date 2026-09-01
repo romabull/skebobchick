@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
 const path = require('path');
 const cors = require('cors');
+const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -19,8 +20,9 @@ app.use(cors({
 }));
 
 // ============ СТАТИЧЕСКИЕ ФАЙЛЫ ============
-// Раздаём статические файлы из папки public
+// Сначала проверяем в папке public, потом в корне
 app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(__dirname)); // Добавляем корневую папку
 
 // ============ БАЗА ДАННЫХ ============
 const db = {
@@ -335,10 +337,24 @@ app.get('/api/admin/stats', (req, res) => {
     }
 });
 
-// ============ СТРАНИЦЫ (SPA) ============
-// Отдаём index.html для всех остальных маршрутов (SPA)
-app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+// ============ СТРАНИЦЫ ============
+// Отдаём HTML страницы
+app.get('/', (req, res) => {
+    const indexPath = path.join(__dirname, 'public', 'index.html');
+    if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath);
+    } else {
+        res.sendFile(path.join(__dirname, 'index.html'));
+    }
+});
+
+app.get('/admin', (req, res) => {
+    const adminPath = path.join(__dirname, 'public', 'admin.html');
+    if (fs.existsSync(adminPath)) {
+        res.sendFile(adminPath);
+    } else {
+        res.sendFile(path.join(__dirname, 'admin.html'));
+    }
 });
 
 // ============ ЗАПУСК ============
