@@ -18,6 +18,10 @@ app.use(cors({
     credentials: true
 }));
 
+// ============ СТАТИЧЕСКИЕ ФАЙЛЫ ============
+// Раздаём статические файлы из папки public
+app.use(express.static(path.join(__dirname, 'public')));
+
 // ============ БАЗА ДАННЫХ ============
 const db = {
     users: {},
@@ -331,36 +335,8 @@ app.get('/api/admin/stats', (req, res) => {
     }
 });
 
-// ============ СТАТИЧЕСКИЕ ФАЙЛЫ ============
-// (Порядок важен! API обрабатываются выше)
-
-// Статические файлы
-app.get('/style.css', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'style.css'));
-});
-
-app.get('/script.js', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'script.js'));
-});
-
-app.get('/admin.js', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'admin.js'));
-});
-
-app.get('/admin.css', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'admin.css'));
-});
-
-// Страницы
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-app.get('/admin', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'admin.html'));
-});
-
-// ВСЕГДА В КОНЦЕ! - Перехватывает все остальные запросы
+// ============ СТРАНИЦЫ (SPA) ============
+// Отдаём index.html для всех остальных маршрутов (SPA)
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
