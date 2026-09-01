@@ -14,14 +14,11 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' ? false : '*',
-  credentials: true
+    origin: process.env.NODE_ENV === 'production' ? false : '*',
+    credentials: true
 }));
 
-// Статика
-app.use(express.static('public'));
-
-// База данных (в памяти)
+// ============ БАЗА ДАННЫХ ============
 const db = {
     users: {},
     tests: {},
@@ -29,7 +26,7 @@ const db = {
     testIdCounter: 1
 };
 
-// Инициализация администратора
+// ============ ИНИЦИАЛИЗАЦИЯ ============
 async function initAdmin() {
     const hashedPassword = await bcrypt.hash('admin123', 10);
     db.users['admin'] = {
@@ -112,11 +109,7 @@ app.post('/api/login', async (req, res) => {
             secure: process.env.NODE_ENV === 'production'
         });
         
-        res.json({ 
-            success: true, 
-            username, 
-            role: user.role 
-        });
+        res.json({ success: true, username, role: user.role });
     } catch (error) {
         res.status(500).json({ error: 'Ошибка сервера' });
     }
@@ -135,44 +128,12 @@ app.get('/api/me', (req, res) => {
     
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
-        res.json({ 
-            username: decoded.username, 
-            role: decoded.role 
-        });
+        res.json({ username: decoded.username, role: decoded.role });
     } catch (error) {
         res.status(401).json({ error: 'Не авторизован' });
     }
 });
-app.get('/style.css', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'style.css'));
-});
 
-app.get('/script.js', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'script.js'));
-});
-
-app.get('/admin.js', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'admin.js'));
-});
-
-app.get('/admin.css', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'admin.css'));
-});
-
-// Главная страница
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-// Админская страница
-app.get('/admin', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'admin.html'));
-});
-
-// Все остальные маршруты - index.html (для SPA)
-app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
 // ============ ТЕСТЫ ============
 
 app.get('/api/tests', (req, res) => {
@@ -275,8 +236,6 @@ app.delete('/api/tests/:id', (req, res) => {
     }
 });
 
-// ============ ПРОХОЖДЕНИЕ ТЕСТОВ ============
-
 app.post('/api/tests/:id/check', (req, res) => {
     const token = req.cookies.token;
     if (!token) return res.status(401).json({ error: 'Не авторизован' });
@@ -340,8 +299,6 @@ app.get('/api/results', (req, res) => {
     }
 });
 
-// ============ СТАТИСТИКА ============
-
 app.get('/api/admin/stats', (req, res) => {
     const token = req.cookies.token;
     if (!token) return res.status(401).json({ error: 'Не авторизован' });
@@ -374,14 +331,36 @@ app.get('/api/admin/stats', (req, res) => {
     }
 });
 
-// ============ СТРАНИЦЫ ============
+// ============ СТАТИЧЕСКИЕ ФАЙЛЫ ============
+// (Порядок важен! API обрабатываются выше)
 
-// Отдаём админскую страницу
+// Статические файлы
+app.get('/style.css', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'style.css'));
+});
+
+app.get('/script.js', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'script.js'));
+});
+
+app.get('/admin.js', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'admin.js'));
+});
+
+app.get('/admin.css', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'admin.css'));
+});
+
+// Страницы
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 app.get('/admin', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
-// Все остальные маршруты - index.html
+// ВСЕГДА В КОНЦЕ! - Перехватывает все остальные запросы
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
@@ -446,7 +425,7 @@ async function startServer() {
     });
 }
 
-// Для Vercel экспортируем app
+// Для Vercel
 if (process.env.NODE_ENV === 'production') {
     module.exports = app;
 }
