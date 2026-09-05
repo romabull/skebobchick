@@ -606,7 +606,16 @@ app.get('/admin', (req, res) => {
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
-
+app.get('/api/test', (req, res) => {
+    res.json({ 
+        status: 'ok', 
+        firebase: firebaseInitialized ? 'connected' : 'not connected',
+        env: {
+            projectId: process.env.FIREBASE_PROJECT_ID || 'not set',
+            clientEmail: process.env.FIREBASE_CLIENT_EMAIL || 'not set'
+        }
+    });
+});
 // ============ ЗАПУСК ============
 
 async function startServer() {
