@@ -1,5 +1,6 @@
 let adminUser = null;
 let tests = [];
+let questionCounter = 0;
 
 const adminPanel = document.getElementById('adminPanel');
 const adminUserEl = document.getElementById('adminUser');
@@ -9,7 +10,6 @@ const createForm = document.getElementById('createTestForm');
 const addQuestionBtn = document.getElementById('addQuestionBtn');
 const questionsList = document.getElementById('questionsList');
 const statsContent = document.getElementById('statsContent');
-let questionCounter = 0;
 
 async function checkAdminAccess() {
     try {
@@ -25,7 +25,6 @@ async function checkAdminAccess() {
                 return;
             }
         }
-        // Если не админ, перенаправляем на главную
         window.location.href = '/';
     } catch (error) {
         window.location.href = '/';
@@ -51,17 +50,24 @@ function renderTests() {
     }
     
     testsList.innerHTML = tests.map(test => `
-        <div class="test-item-admin">
+        <div class="test-item-admin" data-test-id="${test.id}">
             <div class="info">
                 <h4>${test.title}</h4>
-                <p>${test.description || 'Нет описания'} • ${test.questionCount} вопросов</p>
-                <small style="color: #a0aec0;">Создан: ${new Date(test.createdAt).toLocaleDateString()}</small>
+                <p>${test.description || 'Нет описания'} • ${test.questionCount || test.questions?.length || 0} вопросов</p>
+                <small style="color: #a0aec0;">Создан: ${test.createdAt ? new Date(test.createdAt).toLocaleDateString() : 'недавно'}</small>
             </div>
             <div class="actions">
-                <button class="btn-small" onclick="deleteTest(${test.id})">🗑️ Удалить</button>
+                <button class="btn-small btn-delete" data-test-id="${test.id}">🗑️ Удалить</button>
             </div>
         </div>
     `).join('');
+
+    testsList.querySelectorAll('.btn-delete').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const testId = this.dataset.testId;
+            deleteTest(testId);
+        });
+    });
 }
 
 async function deleteTest(testId) {
@@ -75,6 +81,8 @@ async function deleteTest(testId) {
         if (response.ok) {
             loadTests();
             loadStats();
+        } else {
+            alert('Ошибка удаления теста');
         }
     } catch (error) {
         alert('Ошибка удаления');
@@ -97,9 +105,10 @@ createForm.addEventListener('submit', async (e) => {
         const optionInputs = el.querySelectorAll('.option-input');
         optionInputs.forEach(input => options.push(input.value));
         const correct = parseInt(el.querySelector('.correct-option').value);
+        const hint = el.querySelector('.hint-input') ? el.querySelector('.hint-input').value : '';
         
         if (qText && options.length === 4 && options.every(o => o.trim())) {
-            questions.push({ question: qText, options, correct });
+            questions.push({ question: qText, options, correct, hint });
         }
     });
     
@@ -150,10 +159,19 @@ addQuestionBtn.addEventListener('click', () => {
                 <label>Правильный ответ (0-3)</label>
                 <input type="number" class="correct-option" min="0" max="3" value="0" required>
             </div>
-            <button type="button" class="remove-question" onclick="this.parentElement.remove()">✕ Удалить вопрос</button>
+            <div class="form-group">
+                <label>Подсказка (необязательно)</label>
+                <input type="text" class="hint-input" placeholder="Введите подсказку для этого вопроса">
+            </div>
+            <button type="button" class="remove-question">✕ Удалить вопрос</button>
         </div>
     `;
     questionsList.insertAdjacentHTML('beforeend', html);
+    
+    const lastEditor = questionsList.lastElementChild;
+    lastEditor.querySelector('.remove-question').addEventListener('click', function() {
+        this.parentElement.remove();
+    });
 });
 
 async function loadStats() {
@@ -172,19 +190,19 @@ function renderStats(stats) {
     statsContent.innerHTML = `
         <div class="stats-grid">
             <div class="stat-card">
-                <div class="number">${stats.totalUsers}</div>
+                <div class="number">${stats.totalUsers || 0}</div>
                 <div class="label">Пользователей</div>
             </div>
             <div class="stat-card">
-                <div class="number">${stats.totalTests}</div>
+                <div class="number">${stats.totalTests || 0}</div>
                 <div class="label">Тестов</div>
             </div>
             <div class="stat-card">
-                <div class="number">${stats.totalResults}</div>
+                <div class="number">${stats.totalResults || 0}</div>
                 <div class="label">Пройдено тестов</div>
             </div>
         </div>
-        ${stats.totalUsers > 0 ? `
+        ${stats.users && stats.users.length > 0 ? `
             <h4 style="margin-top: 20px; color: #2d3748;">Пользователи:</h4>
             <ul style="list-style: none; padding: 0;">
                 ${stats.users.map(u => `<li style="padding: 5px 0; color: #4a5568;">👤 ${u}</li>`).join('')}

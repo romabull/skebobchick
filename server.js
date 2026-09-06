@@ -394,7 +394,8 @@ app.post('/api/tests', async (req, res) => {
                 id: index + 1,
                 question: q.question,
                 options: q.options,
-                correct: parseInt(q.correct)
+                correct: parseInt(q.correct),
+                hint: q.hint || ''  // ДОБАВЛЕНО: поле подсказки
             })),
             createdBy: decoded.username
         };
@@ -462,7 +463,8 @@ app.post('/api/tests/:id/check', async (req, res) => {
                 question: q.question,
                 userAnswer: userAnswer !== undefined ? q.options[userAnswer] : 'Не отвечено',
                 correctAnswer: q.options[q.correct],
-                isCorrect
+                isCorrect,
+                hint: q.hint || ''  // ДОБАВЛЕНО: передаем подсказку в результаты
             };
         });
         
@@ -606,6 +608,7 @@ app.get('/admin', (req, res) => {
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
+
 app.get('/api/test', (req, res) => {
     res.json({ 
         status: 'ok', 
@@ -616,6 +619,7 @@ app.get('/api/test', (req, res) => {
         }
     });
 });
+
 // ============ ЗАПУСК ============
 
 async function startServer() {
@@ -641,27 +645,32 @@ async function startServer() {
             {
                 question: 'Какая формула используется для расчета скорости?',
                 options: ['v = s/t', 'v = t/s', 'v = s*t', 'v = s/t²'],
-                correct: 0
+                correct: 0,
+                hint: 'Скорость = расстояние / время'  // ДОБАВЛЕНО: подсказка
             },
             {
                 question: 'В каких единицах измеряется скорость в системе СИ?',
                 options: ['км/ч', 'м/с', 'см/с', 'м/мин'],
-                correct: 1
+                correct: 1,
+                hint: 'Основная единица скорости в СИ - метр в секунду'  // ДОБАВЛЕНО: подсказка
             },
             {
                 question: 'По какой формуле вычисляется плотность вещества?',
                 options: ['ρ = V/m', 'ρ = m/V', 'ρ = m*V', 'ρ = V/m²'],
-                correct: 1
+                correct: 1,
+                hint: 'Плотность = масса / объем'  // ДОБАВЛЕНО: подсказка
             },
             {
                 question: 'В чем измеряется сила в системе СИ?',
                 options: ['Ньютон', 'Джоуль', 'Ватт', 'Паскаль'],
-                correct: 0
+                correct: 0,
+                hint: 'Сила измеряется в ньютонах'  // ДОБАВЛЕНО: подсказка
             },
             {
                 question: 'Какое количество теплоты требуется для нагревания тела?',
                 options: ['Q = cmΔt', 'Q = λm', 'Q = Lm', 'Q = qm'],
-                correct: 0
+                correct: 0,
+                hint: 'Количество теплоты = удельная теплоемкость × масса × изменение температуры'  // ДОБАВЛЕНО: подсказка
             }
         ];
         
@@ -672,7 +681,7 @@ async function startServer() {
             questions: testQuestions,
             createdBy: 'admin'
         });
-        console.log('✅ Тестовый тест создан');
+        console.log('✅ Тестовый тест создан с подсказками');
     }
     
     if (process.env.NODE_ENV !== 'production') {

@@ -786,3 +786,54 @@ header {
     box-shadow: 0 0 50px rgba(102, 126, 234, 0.4) !important;
     transform: scale(1.2) rotate(5deg) !important;
 }
+/* ============ СТИЛИ ДЛЯ ПОДСКАЗКИ ============ */
+#hintContainer {
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+#hintBtn {
+    background: #edf2f7;
+    border: 2px solid #d69e2e;
+    color: #744210;
+    padding: 8px 20px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 15px;
+    font-weight: 600;
+    transition: all 0.3s;
+}
+
+#hintBtn:hover {
+    background: #fefcbf;
+    transform: scale(1.05);
+}
+
+.hint-input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    font-size: 14px;
+    background: #fffff0;
+}
+
+.hint-input:focus {
+    outline: none;
+    border-color: #d69e2e;
+    box-shadow: 0 0 0 3px rgba(214, 158, 46, 0.2);
+}
+
+.answer-detail .hint-text {
+    font-size: 12px;
+    color: #d69e2e;
+    margin-top: 4px;
+    padding: 4px 8px;
+    background: #fefcbf;
+    border-radius: 4px;
+    display: inline-block;
+}

@@ -38,6 +38,12 @@ const statsContent = document.getElementById('statsContent');
 const myResultsContent = document.getElementById('myResultsContent');
 const leaderboardContent = document.getElementById('leaderboardContent');
 
+// ============ ДОБАВЛЕНЫ ПЕРЕМЕННЫЕ ДЛЯ ПОДСКАЗКИ ============
+const hintBtn = document.getElementById('hintBtn');
+const hintContainer = document.getElementById('hintContainer');
+const hintText = document.getElementById('hintText');
+let hintUsed = false;
+
 // ============ 🎨 ФОН С КВАДРАТИКАМИ ============
 function createSquares() {
     const container = document.getElementById('background-squares');
@@ -46,52 +52,40 @@ function createSquares() {
     const count = 80;
     const squares = [];
     
-    // Создаем квадратики
     for (let i = 0; i < count; i++) {
         const square = document.createElement('div');
         square.className = `square ${sizes[Math.floor(Math.random() * sizes.length)]} ${colors[Math.floor(Math.random() * colors.length)]}`;
-        
-        // Случайная позиция
         square.style.left = Math.random() * 100 + '%';
         square.style.top = Math.random() * 100 + '%';
-        
-        // Случайное вращение
         square.style.transform = `rotate(${Math.random() * 360}deg)`;
-        
         container.appendChild(square);
         squares.push(square);
     }
     
-    // Переменные для отслеживания мыши
     let mouseX = -1000;
     let mouseY = -1000;
     let animationId = null;
     let isMouseOnScreen = false;
     
-    // Функция обновления квадратиков
     function updateSquares() {
-        const radius = 200; // Радиус появления квадратиков
+        const radius = 200;
         
-        squares.forEach((square, index) => {
+        squares.forEach((square) => {
             const rect = square.getBoundingClientRect();
             const centerX = rect.left + rect.width / 2;
             const centerY = rect.top + rect.height / 2;
             
-            // Расстояние от мыши до центра квадратика
             const dx = mouseX - centerX;
             const dy = mouseY - centerY;
             const distance = Math.sqrt(dx * dx + dy * dy);
             
-            // Если мышь на экране и квадратик в радиусе
             if (isMouseOnScreen && distance < radius) {
-                // Чем ближе к мыши, тем ярче
                 const intensity = 1 - (distance / radius);
                 square.classList.add('active');
                 square.style.opacity = 0.2 + intensity * 0.8;
                 square.style.transform = `scale(${0.8 + intensity * 0.4}) rotate(${intensity * 10}deg)`;
                 square.style.boxShadow = `0 0 ${30 + intensity * 40}px rgba(102, 126, 234, ${0.1 + intensity * 0.3})`;
                 
-                // Меняем цвет в зависимости от расстояния
                 if (intensity > 0.7) {
                     square.style.background = 'rgba(102, 126, 234, 0.5)';
                     square.style.borderColor = 'rgba(102, 126, 234, 0.8)';
@@ -103,7 +97,6 @@ function createSquares() {
                     square.style.borderColor = 'rgba(102, 126, 234, 0.3)';
                 }
             } else {
-                // Если мышь убрали или квадратик далеко - скрываем
                 square.classList.remove('active');
                 square.style.opacity = '0';
                 square.style.transform = `scale(0.5) rotate(0deg)`;
@@ -114,7 +107,6 @@ function createSquares() {
         animationId = requestAnimationFrame(updateSquares);
     }
     
-    // Отслеживаем движение мыши
     document.addEventListener('mousemove', (e) => {
         mouseX = e.clientX;
         mouseY = e.clientY;
@@ -125,13 +117,11 @@ function createSquares() {
         }
     });
     
-    // Когда мышь покидает окно
     document.addEventListener('mouseleave', () => {
         isMouseOnScreen = false;
         mouseX = -1000;
         mouseY = -1000;
         
-        // Плавно скрываем все квадратики
         squares.forEach(square => {
             square.classList.remove('active');
             square.style.opacity = '0';
@@ -144,20 +134,10 @@ function createSquares() {
             animationId = null;
         }
     });
-    
-    // Оптимизация: обновляем при скролле
-    let scrollTimeout;
-    window.addEventListener('scroll', () => {
-        clearTimeout(scrollTimeout);
-        scrollTimeout = setTimeout(() => {
-            // Пересчитываем позиции квадратиков
-        }, 100);
-    });
 }
 
-// ============ ОСТАЛЬНОЙ КОД ============
+// ============ АВТОРИЗАЦИЯ ============
 
-// Проверка авторизации
 async function checkAuth() {
     try {
         const response = await fetch('/api/me');
@@ -226,12 +206,14 @@ function showResultsPage() {
     resultsPage.style.display = 'block';
 }
 
-// Загрузка тестов
+// ============ ТЕСТЫ ============
+
 async function loadTests() {
     try {
         const response = await fetch('/api/tests');
         if (response.ok) {
             tests = await response.json();
+            console.log('📝 Загружены тесты:', tests);
             renderTests();
         }
     } catch (error) {
@@ -240,7 +222,7 @@ async function loadTests() {
 }
 
 function renderTests() {
-    if (tests.length === 0) {
+    if (!tests || tests.length === 0) {
         testsList.innerHTML = `
             <div style="text-align: center; padding: 40px; color: #718096;">
                 <p>📭 Нет доступных тестов</p>
@@ -250,39 +232,93 @@ function renderTests() {
         return;
     }
     
-    testsList.innerHTML = tests.map(test => `
-        <div class="test-card">
-            <div class="test-card-header">
-                <div>
-                    <h3>${test.title}</h3>
-                    <p>${test.description || 'Нет описания'}</p>
-                    <div class="meta">
-                        ${test.class || '7-8'} класс • ${test.questionCount} вопросов
-                        ${test.createdBy ? ` • Создал: ${test.createdBy}` : ''}
+    let html = '';
+    tests.forEach((test) => {
+        const testId = test.id;
+        console.log(`📝 Тест: ${test.title}, ID: ${testId}, тип: ${typeof testId}`);
+        
+        html += `
+            <div class="test-card">
+                <div class="test-card-header">
+                    <div>
+                        <h3>${test.title || 'Без названия'}</h3>
+                        <p>${test.description || 'Нет описания'}</p>
+                        <div class="meta">
+                            ${test.class || '7-8'} класс • ${test.questions?.length || 0} вопросов
+                            ${test.createdBy ? ` • Создал: ${test.createdBy}` : ''}
+                        </div>
+                    </div>
+                    <div class="actions">
+                        <button class="btn-primary" data-test-id="${testId}">Пройти тест</button>
+                        ${currentRole === 'admin' ? `<button class="btn-small btn-danger" data-test-id="${testId}">🗑️</button>` : ''}
                     </div>
                 </div>
-                <div class="actions">
-                    <button class="btn-primary" onclick="startTest(${test.id})">Пройти тест</button>
-                    ${currentRole === 'admin' ? `<button class="btn-small btn-danger" onclick="deleteTest(${test.id})">🗑️</button>` : ''}
-                </div>
             </div>
-        </div>
-    `).join('');
+        `;
+    });
+    
+    testsList.innerHTML = html;
+
+    testsList.querySelectorAll('.btn-primary[data-test-id]').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            const testId = this.getAttribute('data-test-id');
+            console.log('📝 Клик "Пройти тест", testId:', testId);
+            if (testId) {
+                startTest(testId);
+            } else {
+                alert('Ошибка: ID теста не найден');
+            }
+        });
+    });
+
+    testsList.querySelectorAll('.btn-danger[data-test-id]').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            const testId = this.getAttribute('data-test-id');
+            console.log('📝 Клик "Удалить", testId:', testId);
+            if (testId) {
+                deleteTest(testId);
+            }
+        });
+    });
 }
 
 async function startTest(testId) {
+    console.log('🔍 startTest начал работу с testId:', testId, 'тип:', typeof testId);
+    
+    if (!testId) {
+        console.error('❌ testId пустой');
+        alert('Ошибка: ID теста не указан');
+        return;
+    }
+    
     try {
+        console.log(`📤 Запрос к /api/tests/${testId}`);
         const response = await fetch(`/api/tests/${testId}`);
+        console.log('📥 Ответ сервера:', response.status);
+        
         if (response.ok) {
             const test = await response.json();
+            console.log('✅ Тест загружен:', test.title);
             showTestPage(test);
+        } else {
+            const error = await response.json().catch(() => ({}));
+            console.error('❌ Ошибка загрузки:', error);
+            alert('Ошибка загрузки теста: ' + (error.error || 'Тест не найден'));
         }
     } catch (error) {
-        alert('Ошибка загрузки теста');
+        console.error('❌ Ошибка соединения:', error);
+        alert('Ошибка загрузки теста. Проверьте соединение с сервером.');
     }
 }
 
 async function deleteTest(testId) {
+    if (!testId) {
+        alert('Ошибка: неверный ID теста');
+        return;
+    }
+    
     if (!confirm('Удалить этот тест?')) return;
     
     try {
@@ -291,14 +327,21 @@ async function deleteTest(testId) {
         });
         
         if (response.ok) {
+            alert('Тест удалён!');
             loadTests();
-            loadStats();
+            if (currentRole === 'admin') loadStats();
             loadLeaderboard();
+        } else {
+            const error = await response.json().catch(() => ({}));
+            alert('Ошибка удаления: ' + (error.error || 'Неизвестная ошибка'));
         }
     } catch (error) {
+        console.error('Ошибка удаления:', error);
         alert('Ошибка удаления');
     }
 }
+
+// ============ ОТОБРАЖЕНИЕ ВОПРОСОВ С ПОДСКАЗКОЙ ============
 
 function renderQuestion() {
     if (!currentTest) return;
@@ -307,6 +350,12 @@ function renderQuestion() {
     const total = currentTest.questions.length;
     
     questionCounter.textContent = `Вопрос ${currentQuestionIndex + 1} из ${total}`;
+    
+    // Проверка наличия подсказки
+    const hasHint = q.hint && q.hint.trim().length > 0;
+    hintBtn.style.display = hasHint ? 'inline-block' : 'none';
+    hintContainer.style.display = 'none';
+    hintUsed = false;
     
     let html = `
         <div class="question-item">
@@ -331,6 +380,16 @@ function renderQuestion() {
     `;
     
     questionContainer.innerHTML = html;
+    
+    // Обработчик для кнопки подсказки
+    hintBtn.onclick = function() {
+        if (hasHint) {
+            hintContainer.style.display = 'block';
+            hintText.textContent = q.hint;
+            hintUsed = true;
+            hintBtn.style.display = 'none';
+        }
+    };
 }
 
 function selectOption(optionIndex) {
@@ -412,6 +471,8 @@ async function submitTest() {
     }
 }
 
+// ============ ОТОБРАЖЕНИЕ РЕЗУЛЬТАТОВ С ПОДСКАЗКАМИ ============
+
 function showResults(results) {
     showResultsPage();
     
@@ -433,13 +494,19 @@ function showResults(results) {
     `;
     
     results.results.forEach((r, index) => {
+        // Отображение подсказки в результатах
+        const hintHtml = r.hint ? `<div style="font-size: 12px; color: #d69e2e; margin-top: 4px;">💡 Подсказка: ${r.hint}</div>` : '';
+        
         html += `
             <div class="answer-detail ${r.isCorrect ? 'correct' : 'wrong'}">
-                <span>${index + 1}. ${r.question}</span>
-                <span>
+                <div style="flex: 1;">
+                    <div>${index + 1}. ${r.question}</div>
+                    ${hintHtml}
+                </div>
+                <div style="text-align: right; min-width: 120px;">
                     ${r.isCorrect ? '✅' : '❌'} 
                     ${r.isCorrect ? r.userAnswer : `${r.userAnswer} → ${r.correctAnswer}`}
-                </span>
+                </div>
             </div>
         `;
     });
@@ -447,6 +514,8 @@ function showResults(results) {
     html += '</div>';
     document.getElementById('resultsContent').innerHTML = html;
 }
+
+// ============ РЕЗУЛЬТАТЫ ============
 
 async function loadMyResults() {
     try {
@@ -564,9 +633,10 @@ createForm.addEventListener('submit', async (e) => {
         const optionInputs = el.querySelectorAll('.option-input');
         optionInputs.forEach(input => options.push(input.value));
         const correct = parseInt(el.querySelector('.correct-option').value);
+        const hint = el.querySelector('.hint-input') ? el.querySelector('.hint-input').value : '';  // ДОБАВЛЕНО
         
         if (qText && options.length === 4 && options.every(o => o.trim())) {
-            questions.push({ question: qText, options, correct });
+            questions.push({ question: qText, options, correct, hint });  // ДОБАВЛЕНО: hint
         }
     });
     
@@ -588,7 +658,7 @@ createForm.addEventListener('submit', async (e) => {
             questionsList.innerHTML = '';
             questionCounterAdmin = 0;
             loadTests();
-            loadStats();
+            if (currentRole === 'admin') loadStats();
             loadLeaderboard();
             switchTab('tests');
         } else {
@@ -618,11 +688,17 @@ addQuestionBtn.addEventListener('click', () => {
                 <label>Правильный ответ (0-3)</label>
                 <input type="number" class="correct-option" min="0" max="3" value="0" required>
             </div>
+            <div class="form-group">
+                <label>Подсказка (необязательно)</label>  <!-- ДОБАВЛЕНО -->
+                <input type="text" class="hint-input" placeholder="Введите подсказку для этого вопроса">
+            </div>
             <button type="button" class="remove-question" onclick="this.parentElement.remove()">✕ Удалить вопрос</button>
         </div>
     `;
     questionsList.insertAdjacentHTML('beforeend', html);
 });
+
+// ============ СТАТИСТИКА ============
 
 async function loadStats() {
     try {
@@ -640,19 +716,19 @@ function renderStats(stats) {
     statsContent.innerHTML = `
         <div class="stats-grid">
             <div class="stat-card">
-                <div class="number">${stats.totalUsers}</div>
+                <div class="number">${stats.totalUsers || 0}</div>
                 <div class="label">Пользователей</div>
             </div>
             <div class="stat-card">
-                <div class="number">${stats.totalTests}</div>
+                <div class="number">${stats.totalTests || 0}</div>
                 <div class="label">Тестов</div>
             </div>
             <div class="stat-card">
-                <div class="number">${stats.totalResults}</div>
+                <div class="number">${stats.totalResults || 0}</div>
                 <div class="label">Пройдено тестов</div>
             </div>
         </div>
-        ${stats.totalUsers > 0 ? `
+        ${stats.users && stats.users.length > 0 ? `
             <h4 style="margin-top: 20px; color: #2d3748;">Пользователи:</h4>
             <ul style="list-style: none; padding: 0;">
                 ${stats.users.map(u => `<li style="padding: 5px 0; color: #4a5568;">👤 ${u}</li>`).join('')}
@@ -660,6 +736,8 @@ function renderStats(stats) {
         ` : ''}
     `;
 }
+
+// ============ НАВИГАЦИЯ ============
 
 document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -683,6 +761,8 @@ function switchTab(tab) {
     if (tab === 'tests') loadTests();
     if (tab === 'leaderboard') loadLeaderboard();
 }
+
+// ============ АУТЕНТИФИКАЦИЯ ============
 
 async function login() {
     const username = usernameInput.value.trim();
@@ -730,6 +810,16 @@ async function register() {
         return;
     }
     
+    if (username.length < 3) {
+        authError.textContent = 'Имя должно быть минимум 3 символа';
+        return;
+    }
+    
+    if (password.length < 4) {
+        authError.textContent = 'Пароль должен быть минимум 4 символа';
+        return;
+    }
+    
     try {
         const response = await fetch('/api/register', {
             method: 'POST',
@@ -762,6 +852,8 @@ async function logout() {
         alert('Ошибка выхода');
     }
 }
+
+// ============ СОБЫТИЯ ============
 
 loginBtn.addEventListener('click', login);
 registerBtn.addEventListener('click', register);
