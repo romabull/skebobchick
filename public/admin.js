@@ -11,6 +11,17 @@ const addQuestionBtn = document.getElementById('addQuestionBtn');
 const questionsList = document.getElementById('questionsList');
 const statsContent = document.getElementById('statsContent');
 
+// Редактирование
+const editTestForm = document.getElementById('editTestForm');
+const editTestId = document.getElementById('editTestId');
+const editTestTitle = document.getElementById('editTestTitle');
+const editTestDescription = document.getElementById('editTestDescription');
+const editTestClass = document.getElementById('editTestClass');
+const editQuestionsList = document.getElementById('editQuestionsList');
+const addEditQuestionBtn = document.getElementById('addEditQuestionBtn');
+const cancelEditBtn = document.getElementById('cancelEditBtn');
+let editQuestionCounter = 0;
+
 async function checkAdminAccess() {
     try {
         const response = await fetch('/api/me');
@@ -53,14 +64,25 @@ function renderTests() {
         <div class="test-item-admin" data-test-id="${test.id}">
             <div class="info">
                 <h4>${test.title}</h4>
-                <p>${test.description || 'Нет описания'} • ${test.questionCount || test.questions?.length || 0} вопросов</p>
-                <small style="color: #a0aec0;">Создан: ${test.createdAt ? new Date(test.createdAt).toLocaleDateString() : 'недавно'}</small>
+                <p>${test.description || 'Нет описания'} • ${test.questions?.length || 0} вопросов</p>
+                <small style="color: #a0aec0;">
+                    Создан: ${test.createdAt ? new Date(test.createdAt).toLocaleDateString() : 'недавно'}
+                    ${test.updatedAt ? ` • Обновлен: ${new Date(test.updatedAt).toLocaleDateString()}` : ''}
+                </small>
             </div>
             <div class="actions">
+                <button class="btn-secondary btn-edit" data-test-id="${test.id}">✏️ Редактировать</button>
                 <button class="btn-small btn-delete" data-test-id="${test.id}">🗑️ Удалить</button>
             </div>
         </div>
     `).join('');
+
+    testsList.querySelectorAll('.btn-edit').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const testId = this.dataset.testId;
+            editTest(testId);
+        });
+    });
 
     testsList.querySelectorAll('.btn-delete').forEach(btn => {
         btn.addEventListener('click', function() {
@@ -174,6 +196,162 @@ addQuestionBtn.addEventListener('click', () => {
     });
 });
 
+// ============ РЕДАКТИРОВАНИЕ ============
+
+async function editTest(testId) {
+    try {
+        const response = await fetch(`/api/admin/tests/${testId}/edit`);
+        if (response.ok) {
+            const test = await response.json();
+            
+            editTestId.value = testId;
+            editTestTitle.value = test.title || '';
+            editTestDescription.value = test.description || '';
+            editTestClass.value = test.class || '7-8';
+            
+            editQuestionsList.innerHTML = '';
+            editQuestionCounter = 0;
+            
+            if (test.questions && test.questions.length > 0) {
+                test.questions.forEach(q => {
+                    addEditQuestion(q);
+                });
+            }
+            
+            switchTab('edit');
+        } else {
+            alert('Ошибка загрузки теста для редактирования');
+        }
+    } catch (error) {
+        console.error('Ошибка:', error);
+        alert('Ошибка загрузки теста');
+    }
+}
+
+function addEditQuestion(questionData = null) {
+    editQuestionCounter++;
+    
+    const q = questionData || {
+        question: '',
+        options: ['', '', '', ''],
+        correct: 0,
+        hint: ''
+    };
+    
+    const html = `
+        <div class="question-editor" style="background: #f7fafc; border-radius: 10px; padding: 20px; margin-bottom: 15px; border: 2px solid #e2e8f0; position: relative;">
+            <div class="question-number" style="position: absolute; top: -12px; left: 15px; background: #667eea; color: white; padding: 2px 15px; border-radius: 20px; font-size: 12px; font-weight: 600;">
+                Вопрос ${editQuestionCounter}
+            </div>
+            <div class="form-group">
+                <input type="text" class="edit-q-text" placeholder="Введите вопрос" value="${q.question || ''}" required>
+            </div>
+            <div class="options-editor" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0;">
+                <input type="text" class="edit-option-input" placeholder="Вариант A" value="${q.options[0] || ''}" required>
+                <input type="text" class="edit-option-input" placeholder="Вариант B" value="${q.options[1] || ''}" required>
+                <input type="text" class="edit-option-input" placeholder="Вариант C" value="${q.options[2] || ''}" required>
+                <input type="text" class="edit-option-input" placeholder="Вариант D" value="${q.options[3] || ''}" required>
+            </div>
+            <div class="form-group">
+                <label>Правильный ответ (0-3)</label>
+                <input type="number" class="edit-correct-option" min="0" max="3" value="${q.correct || 0}" required>
+            </div>
+            <div class="form-group">
+                <label>Подсказка (необязательно)</label>
+                <input type="text" class="edit-hint-input" placeholder="Введите подсказку" value="${q.hint || ''}">
+            </div>
+            <button type="button" class="remove-question" style="margin-top: 10px; background: #fc8181; color: white; border: none; padding: 5px 15px; border-radius: 6px; cursor: pointer;">
+                ✕ Удалить вопрос
+            </button>
+        </div>
+    `;
+    
+    editQuestionsList.insertAdjacentHTML('beforeend', html);
+    
+    const lastEditor = editQuestionsList.lastElementChild;
+    lastEditor.querySelector('.remove-question').addEventListener('click', function() {
+        this.parentElement.remove();
+    });
+}
+
+addEditQuestionBtn.addEventListener('click', () => {
+    addEditQuestion();
+});
+
+editTestForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const testId = editTestId.value;
+    const title = editTestTitle.value.trim();
+    const description = editTestDescription.value.trim();
+    const classNum = editTestClass.value.trim();
+    
+    if (!title) {
+        alert('Введите название теста');
+        return;
+    }
+    
+    const questionElements = document.querySelectorAll('#editQuestionsList .question-editor');
+    const questions = [];
+    
+    questionElements.forEach(el => {
+        const qText = el.querySelector('.edit-q-text').value.trim();
+        const options = [];
+        const optionInputs = el.querySelectorAll('.edit-option-input');
+        optionInputs.forEach(input => options.push(input.value.trim()));
+        const correct = parseInt(el.querySelector('.edit-correct-option').value);
+        const hint = el.querySelector('.edit-hint-input')?.value || '';
+        
+        if (qText && options.length === 4 && options.every(o => o)) {
+            questions.push({ 
+                question: qText, 
+                options, 
+                correct: isNaN(correct) ? 0 : correct,
+                hint 
+            });
+        }
+    });
+    
+    if (questions.length === 0) {
+        alert('Добавьте хотя бы один вопрос с 4 вариантами ответов');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/tests/${testId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                title, 
+                description, 
+                class: classNum || '7-8', 
+                questions 
+            })
+        });
+        
+        if (response.ok) {
+            alert('✅ Тест успешно обновлен!');
+            loadTests();
+            loadStats();
+            switchTab('tests');
+        } else {
+            const data = await response.json();
+            alert(data.error || 'Ошибка обновления теста');
+        }
+    } catch (error) {
+        console.error('Ошибка:', error);
+        alert('Ошибка сервера');
+    }
+});
+
+cancelEditBtn.addEventListener('click', () => {
+    if (confirm('Отменить редактирование?')) {
+        switchTab('tests');
+    }
+});
+
+// ============ СТАТИСТИКА ============
+
 async function loadStats() {
     try {
         const response = await fetch('/api/admin/stats');
@@ -210,6 +388,8 @@ function renderStats(stats) {
         ` : ''}
     `;
 }
+
+// ============ НАВИГАЦИЯ ============
 
 document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {

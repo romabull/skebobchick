@@ -533,7 +533,94 @@ app.get('/api/admin/stats', async (req, res) => {
         res.status(401).json({ error: 'Не авторизован' });
     }
 });
+// ============ РЕДАКТИРОВАНИЕ ТЕСТА ============
 
+app.put('/api/tests/:id', async (req, res) => {
+    const token = req.cookies.token;
+    if (!token) return res.status(401).json({ error: 'Не авторизован' });
+    
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        if (decoded.role !== 'admin') {
+            return res.status(403).json({ error: 'Доступ только для администратора' });
+        }
+        
+        const testId = req.params.id;
+        const { title, description, class: classNum, questions } = req.body;
+        
+        // Проверяем существование теста
+        const existingTest = await getTest(testId);
+        if (!existingTest) {
+            return res.status(404).json({ error: 'Тест не найден' });
+        }
+        
+        if (!title || !questions || !Array.isArray(questions) || questions.length === 0) {
+            return res.status(400).json({ error: 'Некорректные данные' });
+        }
+        
+        const updatedTest = {
+            title,
+            description: description || '',
+            class: classNum || '7-8',
+            questions: questions.map((q, index) => ({
+                id: index + 1,
+                question: q.question,
+                options: q.options,
+                correct: parseInt(q.correct),
+                hint: q.hint || ''
+            })),
+            createdBy: existingTest.createdBy || decoded.username,
+            updatedAt: new Date()
+        };
+        
+        // Обновляем в Firebase или памяти
+        if (firebaseInitialized) {
+            try {
+                await db.collection('tests').doc(String(testId)).update(updatedTest);
+                console.log(`✅ Обновлен тест: ${title}`);
+                res.json({ success: true, message: 'Тест обновлен', test: { id: testId, ...updatedTest } });
+            } catch (error) {
+                console.error('❌ Ошибка обновления теста:', error.message);
+                res.status(500).json({ error: 'Ошибка обновления теста' });
+            }
+        } else {
+            // Обновляем в памяти
+            if (memoryDB.tests[testId]) {
+                memoryDB.tests[testId] = { id: testId, ...updatedTest };
+                console.log(`✅ Обновлен тест: ${title}`);
+                res.json({ success: true, message: 'Тест обновлен', test: { id: testId, ...updatedTest } });
+            } else {
+                res.status(404).json({ error: 'Тест не найден' });
+            }
+        }
+    } catch (error) {
+        console.error('Ошибка обновления теста:', error);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    }
+});
+
+// Получение теста для редактирования (с полными данными)
+app.get('/api/admin/tests/:id/edit', async (req, res) => {
+    const token = req.cookies.token;
+    if (!token) return res.status(401).json({ error: 'Не авторизован' });
+    
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        if (decoded.role !== 'admin') {
+            return res.status(403).json({ error: 'Доступ только для администратора' });
+        }
+        
+        const test = await getTest(req.params.id);
+        if (!test) {
+            return res.status(404).json({ error: 'Тест не найден' });
+        }
+        
+        res.json(test);
+    } catch (error) {
+        console.error('Ошибка получения теста для редактирования:', error);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    }
+});
 // ============ 🏆 ТАБЛИЦА ЛИДЕРОВ ============
 
 app.get('/api/leaderboard', async (req, res) => {

@@ -38,7 +38,18 @@ const statsContent = document.getElementById('statsContent');
 const myResultsContent = document.getElementById('myResultsContent');
 const leaderboardContent = document.getElementById('leaderboardContent');
 
-// ============ ДОБАВЛЕНЫ ПЕРЕМЕННЫЕ ДЛЯ ПОДСКАЗКИ ============
+// Редактирование
+const editTestForm = document.getElementById('editTestForm');
+const editTestId = document.getElementById('editTestId');
+const editTestTitle = document.getElementById('editTestTitle');
+const editTestDescription = document.getElementById('editTestDescription');
+const editTestClass = document.getElementById('editTestClass');
+const editQuestionsList = document.getElementById('editQuestionsList');
+const addEditQuestionBtn = document.getElementById('addEditQuestionBtn');
+const cancelEditBtn = document.getElementById('cancelEditBtn');
+let editQuestionCounter = 0;
+
+// Подсказка
 const hintBtn = document.getElementById('hintBtn');
 const hintContainer = document.getElementById('hintContainer');
 const hintText = document.getElementById('hintText');
@@ -235,7 +246,6 @@ function renderTests() {
     let html = '';
     tests.forEach((test) => {
         const testId = test.id;
-        console.log(`📝 Тест: ${test.title}, ID: ${testId}, тип: ${typeof testId}`);
         
         html += `
             <div class="test-card">
@@ -246,11 +256,15 @@ function renderTests() {
                         <div class="meta">
                             ${test.class || '7-8'} класс • ${test.questions?.length || 0} вопросов
                             ${test.createdBy ? ` • Создал: ${test.createdBy}` : ''}
+                            ${test.updatedAt ? ` • Обновлен: ${new Date(test.updatedAt).toLocaleDateString()}` : ''}
                         </div>
                     </div>
                     <div class="actions">
                         <button class="btn-primary" data-test-id="${testId}">Пройти тест</button>
-                        ${currentRole === 'admin' ? `<button class="btn-small btn-danger" data-test-id="${testId}">🗑️</button>` : ''}
+                        ${currentRole === 'admin' ? `
+                            <button class="btn-secondary btn-edit" data-test-id="${testId}">✏️</button>
+                            <button class="btn-small btn-danger" data-test-id="${testId}">🗑️</button>
+                        ` : ''}
                     </div>
                 </div>
             </div>
@@ -263,12 +277,15 @@ function renderTests() {
         btn.addEventListener('click', function(e) {
             e.preventDefault();
             const testId = this.getAttribute('data-test-id');
-            console.log('📝 Клик "Пройти тест", testId:', testId);
-            if (testId) {
-                startTest(testId);
-            } else {
-                alert('Ошибка: ID теста не найден');
-            }
+            if (testId) startTest(testId);
+        });
+    });
+
+    testsList.querySelectorAll('.btn-edit[data-test-id]').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            const testId = this.getAttribute('data-test-id');
+            if (testId) editTest(testId);
         });
     });
 
@@ -276,16 +293,13 @@ function renderTests() {
         btn.addEventListener('click', function(e) {
             e.preventDefault();
             const testId = this.getAttribute('data-test-id');
-            console.log('📝 Клик "Удалить", testId:', testId);
-            if (testId) {
-                deleteTest(testId);
-            }
+            if (testId) deleteTest(testId);
         });
     });
 }
 
 async function startTest(testId) {
-    console.log('🔍 startTest начал работу с testId:', testId, 'тип:', typeof testId);
+    console.log('🔍 startTest начал работу с testId:', testId);
     
     if (!testId) {
         console.error('❌ testId пустой');
@@ -351,7 +365,6 @@ function renderQuestion() {
     
     questionCounter.textContent = `Вопрос ${currentQuestionIndex + 1} из ${total}`;
     
-    // Проверка наличия подсказки
     const hasHint = q.hint && q.hint.trim().length > 0;
     hintBtn.style.display = hasHint ? 'inline-block' : 'none';
     hintContainer.style.display = 'none';
@@ -381,7 +394,6 @@ function renderQuestion() {
     
     questionContainer.innerHTML = html;
     
-    // Обработчик для кнопки подсказки
     hintBtn.onclick = function() {
         if (hasHint) {
             hintContainer.style.display = 'block';
@@ -494,7 +506,6 @@ function showResults(results) {
     `;
     
     results.results.forEach((r, index) => {
-        // Отображение подсказки в результатах
         const hintHtml = r.hint ? `<div style="font-size: 12px; color: #d69e2e; margin-top: 4px;">💡 Подсказка: ${r.hint}</div>` : '';
         
         html += `
@@ -633,10 +644,10 @@ createForm.addEventListener('submit', async (e) => {
         const optionInputs = el.querySelectorAll('.option-input');
         optionInputs.forEach(input => options.push(input.value));
         const correct = parseInt(el.querySelector('.correct-option').value);
-        const hint = el.querySelector('.hint-input') ? el.querySelector('.hint-input').value : '';  // ДОБАВЛЕНО
+        const hint = el.querySelector('.hint-input') ? el.querySelector('.hint-input').value : '';
         
         if (qText && options.length === 4 && options.every(o => o.trim())) {
-            questions.push({ question: qText, options, correct, hint });  // ДОБАВЛЕНО: hint
+            questions.push({ question: qText, options, correct, hint });
         }
     });
     
@@ -689,13 +700,165 @@ addQuestionBtn.addEventListener('click', () => {
                 <input type="number" class="correct-option" min="0" max="3" value="0" required>
             </div>
             <div class="form-group">
-                <label>Подсказка (необязательно)</label>  <!-- ДОБАВЛЕНО -->
+                <label>Подсказка (необязательно)</label>
                 <input type="text" class="hint-input" placeholder="Введите подсказку для этого вопроса">
             </div>
             <button type="button" class="remove-question" onclick="this.parentElement.remove()">✕ Удалить вопрос</button>
         </div>
     `;
     questionsList.insertAdjacentHTML('beforeend', html);
+});
+
+// ============ РЕДАКТИРОВАНИЕ ТЕСТА ============
+
+async function editTest(testId) {
+    console.log('✏️ Редактирование теста:', testId);
+    
+    try {
+        const response = await fetch(`/api/admin/tests/${testId}/edit`);
+        if (response.ok) {
+            const test = await response.json();
+            
+            editTestId.value = testId;
+            editTestTitle.value = test.title || '';
+            editTestDescription.value = test.description || '';
+            editTestClass.value = test.class || '7-8';
+            
+            editQuestionsList.innerHTML = '';
+            editQuestionCounter = 0;
+            
+            if (test.questions && test.questions.length > 0) {
+                test.questions.forEach(q => {
+                    addEditQuestion(q);
+                });
+            }
+            
+            switchTab('edit');
+        } else {
+            alert('Ошибка загрузки теста для редактирования');
+        }
+    } catch (error) {
+        console.error('Ошибка:', error);
+        alert('Ошибка загрузки теста');
+    }
+}
+
+function addEditQuestion(questionData = null) {
+    editQuestionCounter++;
+    
+    const q = questionData || {
+        question: '',
+        options: ['', '', '', ''],
+        correct: 0,
+        hint: ''
+    };
+    
+    const html = `
+        <div class="question-editor" style="background: #f7fafc; border-radius: 10px; padding: 20px; margin-bottom: 15px; border: 2px solid #e2e8f0; position: relative;">
+            <div class="question-number" style="position: absolute; top: -12px; left: 15px; background: #667eea; color: white; padding: 2px 15px; border-radius: 20px; font-size: 12px; font-weight: 600;">
+                Вопрос ${editQuestionCounter}
+            </div>
+            <div class="form-group">
+                <input type="text" class="edit-q-text" placeholder="Введите вопрос" value="${q.question || ''}" required>
+            </div>
+            <div class="options-editor" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0;">
+                <input type="text" class="edit-option-input" placeholder="Вариант A" value="${q.options[0] || ''}" required>
+                <input type="text" class="edit-option-input" placeholder="Вариант B" value="${q.options[1] || ''}" required>
+                <input type="text" class="edit-option-input" placeholder="Вариант C" value="${q.options[2] || ''}" required>
+                <input type="text" class="edit-option-input" placeholder="Вариант D" value="${q.options[3] || ''}" required>
+            </div>
+            <div class="form-group">
+                <label>Правильный ответ (0-3)</label>
+                <input type="number" class="edit-correct-option" min="0" max="3" value="${q.correct || 0}" required>
+            </div>
+            <div class="form-group">
+                <label>Подсказка (необязательно)</label>
+                <input type="text" class="edit-hint-input" placeholder="Введите подсказку" value="${q.hint || ''}">
+            </div>
+            <button type="button" class="remove-question" onclick="this.parentElement.remove()" style="margin-top: 10px; background: #fc8181; color: white; border: none; padding: 5px 15px; border-radius: 6px; cursor: pointer;">
+                ✕ Удалить вопрос
+            </button>
+        </div>
+    `;
+    
+    editQuestionsList.insertAdjacentHTML('beforeend', html);
+}
+
+addEditQuestionBtn.addEventListener('click', () => {
+    addEditQuestion();
+});
+
+editTestForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const testId = editTestId.value;
+    const title = editTestTitle.value.trim();
+    const description = editTestDescription.value.trim();
+    const classNum = editTestClass.value.trim();
+    
+    if (!title) {
+        alert('Введите название теста');
+        return;
+    }
+    
+    const questionElements = document.querySelectorAll('#editQuestionsList .question-editor');
+    const questions = [];
+    
+    questionElements.forEach(el => {
+        const qText = el.querySelector('.edit-q-text').value.trim();
+        const options = [];
+        const optionInputs = el.querySelectorAll('.edit-option-input');
+        optionInputs.forEach(input => options.push(input.value.trim()));
+        const correct = parseInt(el.querySelector('.edit-correct-option').value);
+        const hint = el.querySelector('.edit-hint-input')?.value || '';
+        
+        if (qText && options.length === 4 && options.every(o => o)) {
+            questions.push({ 
+                question: qText, 
+                options, 
+                correct: isNaN(correct) ? 0 : correct,
+                hint 
+            });
+        }
+    });
+    
+    if (questions.length === 0) {
+        alert('Добавьте хотя бы один вопрос с 4 вариантами ответов');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/tests/${testId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                title, 
+                description, 
+                class: classNum || '7-8', 
+                questions 
+            })
+        });
+        
+        if (response.ok) {
+            alert('✅ Тест успешно обновлен!');
+            loadTests();
+            if (currentRole === 'admin') loadStats();
+            loadLeaderboard();
+            switchTab('tests');
+        } else {
+            const data = await response.json();
+            alert(data.error || 'Ошибка обновления теста');
+        }
+    } catch (error) {
+        console.error('Ошибка:', error);
+        alert('Ошибка сервера');
+    }
+});
+
+cancelEditBtn.addEventListener('click', () => {
+    if (confirm('Отменить редактирование?')) {
+        switchTab('tests');
+    }
 });
 
 // ============ СТАТИСТИКА ============

@@ -21,6 +21,7 @@
                 <div class="admin-tabs">
                     <button class="tab-btn active" data-tab="tests">📝 Тесты</button>
                     <button class="tab-btn" data-tab="create">➕ Создать тест</button>
+                    <button class="tab-btn" data-tab="edit">✏️ Редактировать</button>
                     <button class="tab-btn" data-tab="stats">📊 Статистика</button>
                 </div>
             </header>
@@ -50,6 +51,34 @@
                         <button type="button" id="addQuestionBtn" class="btn-secondary">+ Добавить вопрос</button>
                     </div>
                     <button type="submit" class="btn-primary">Создать тест</button>
+                </form>
+            </div>
+
+            <div id="tab-edit" class="tab-content">
+                <h2>✏️ Редактировать тест</h2>
+                <form id="editTestForm">
+                    <input type="hidden" id="editTestId">
+                    <div class="form-group">
+                        <label>Название теста</label>
+                        <input type="text" id="editTestTitle" placeholder="Введите название" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Описание</label>
+                        <textarea id="editTestDescription" placeholder="Краткое описание"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Класс</label>
+                        <input type="text" id="editTestClass" placeholder="7-8" value="7-8">
+                    </div>
+                    <div id="editQuestionsEditor">
+                        <h3>Вопросы</h3>
+                        <div id="editQuestionsList"></div>
+                        <button type="button" id="addEditQuestionBtn" class="btn-secondary">+ Добавить вопрос</button>
+                    </div>
+                    <div style="display: flex; gap: 10px; margin-top: 20px;">
+                        <button type="submit" class="btn-primary">💾 Сохранить изменения</button>
+                        <button type="button" id="cancelEditBtn" class="btn-secondary">❌ Отмена</button>
+                    </div>
                 </form>
             </div>
 

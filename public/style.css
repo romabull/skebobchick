@@ -837,3 +837,154 @@ header {
     border-radius: 4px;
     display: inline-block;
 }
+/* Стиль для кнопки редактирования */
+.btn-edit {
+    padding: 6px 15px;
+    background: #edf2f7;
+    color: #4a5568;
+    border: 2px solid #a0aec0;
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.btn-edit:hover {
+    background: #e2e8f0;
+    border-color: #667eea;
+    transform: scale(1.05);
+}
+
+/* Анимация для кнопок */
+.btn-edit, .btn-danger, .btn-primary {
+    transition: all 0.3s ease;
+}
+
+/* Вкладка редактирования */
+#tab-edit .question-editor {
+    background: #f7fafc;
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 15px;
+    border: 2px solid #e2e8f0;
+    position: relative;
+}
+
+#tab-edit .question-editor .question-number {
+    position: absolute;
+    top: -12px;
+    left: 15px;
+    background: #667eea;
+    color: white;
+    padding: 2px 15px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+}
+/* ============ СТИЛИ ДЛЯ ПОДСКАЗКИ ============ */
+#hintContainer {
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+#hintBtn {
+    background: #edf2f7;
+    border: 2px solid #d69e2e;
+    color: #744210;
+    padding: 8px 20px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 15px;
+    font-weight: 600;
+    transition: all 0.3s;
+}
+
+#hintBtn:hover {
+    background: #fefcbf;
+    transform: scale(1.05);
+}
+
+.hint-input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    font-size: 14px;
+    background: #fffff0;
+}
+
+.hint-input:focus {
+    outline: none;
+    border-color: #d69e2e;
+    box-shadow: 0 0 0 3px rgba(214, 158, 46, 0.2);
+}
+
+/* ============ СТИЛИ ДЛЯ РЕДАКТИРОВАНИЯ ============ */
+.btn-edit {
+    padding: 6px 15px;
+    background: #edf2f7;
+    color: #4a5568;
+    border: 2px solid #a0aec0;
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.btn-edit:hover {
+    background: #e2e8f0;
+    border-color: #667eea;
+    transform: scale(1.05);
+}
+
+#tab-edit .question-editor {
+    background: #f7fafc;
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 15px;
+    border: 2px solid #e2e8f0;
+    position: relative;
+}
+
+#tab-edit .question-editor .question-number {
+    position: absolute;
+    top: -12px;
+    left: 15px;
+    background: #667eea;
+    color: white;
+    padding: 2px 15px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+#tab-edit .question-editor .options-editor {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin: 10px 0;
+}
+
+#tab-edit .question-editor .options-editor input {
+    padding: 8px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+}
+
+#tab-edit .question-editor .remove-question {
+    margin-top: 10px;
+    background: #fc8181;
+    color: white;
+    border: none;
+    padding: 5px 15px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+#tab-edit .question-editor .remove-question:hover {
+    background: #f56565;
+}
