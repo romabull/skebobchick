@@ -6,7 +6,13 @@ let currentQuestionIndex = 0;
 let userAnswers = {};
 let currentTestId = null;
 let questionCounterAdmin = 0;
-let isEditFormOpen = false; // Флаг, открыт ли редактор
+let isEditFormOpen = false;
+
+// Таймер
+let timerInterval = null;
+let timeLeft = 0;
+let totalTimeSpent = 0;
+let testStartTime = 0;
 
 // DOM элементы
 const authPage = document.getElementById('authPage');
@@ -38,6 +44,9 @@ const questionsList = document.getElementById('questionsList');
 const statsContent = document.getElementById('statsContent');
 const myResultsContent = document.getElementById('myResultsContent');
 const leaderboardContent = document.getElementById('leaderboardContent');
+const timerDisplay = document.getElementById('timerDisplay');
+const timerValue = document.getElementById('timerValue');
+const categoryFilter = document.getElementById('categoryFilter');
 
 // Подсказка
 const hintBtn = document.getElementById('hintBtn');
@@ -48,6 +57,7 @@ let hintUsed = false;
 // ============ 🎨 ФОН С КВАДРАТИКАМИ ============
 function createSquares() {
     const container = document.getElementById('background-squares');
+    if (!container) return;
     const colors = ['color-1', 'color-2', 'color-3', 'color-4'];
     const sizes = ['size-1', 'size-2', 'size-3', 'size-4'];
     const count = 80;
@@ -86,17 +96,6 @@ function createSquares() {
                 square.style.opacity = 0.2 + intensity * 0.8;
                 square.style.transform = `scale(${0.8 + intensity * 0.4}) rotate(${intensity * 10}deg)`;
                 square.style.boxShadow = `0 0 ${30 + intensity * 40}px rgba(102, 126, 234, ${0.1 + intensity * 0.3})`;
-                
-                if (intensity > 0.7) {
-                    square.style.background = 'rgba(102, 126, 234, 0.5)';
-                    square.style.borderColor = 'rgba(102, 126, 234, 0.8)';
-                } else if (intensity > 0.4) {
-                    square.style.background = 'rgba(102, 126, 234, 0.3)';
-                    square.style.borderColor = 'rgba(102, 126, 234, 0.5)';
-                } else {
-                    square.style.background = 'rgba(102, 126, 234, 0.15)';
-                    square.style.borderColor = 'rgba(102, 126, 234, 0.3)';
-                }
             } else {
                 square.classList.remove('active');
                 square.style.opacity = '0';
@@ -112,24 +111,19 @@ function createSquares() {
         mouseX = e.clientX;
         mouseY = e.clientY;
         isMouseOnScreen = true;
-        
-        if (!animationId) {
-            updateSquares();
-        }
+        if (!animationId) updateSquares();
     });
     
     document.addEventListener('mouseleave', () => {
         isMouseOnScreen = false;
         mouseX = -1000;
         mouseY = -1000;
-        
         squares.forEach(square => {
             square.classList.remove('active');
             square.style.opacity = '0';
             square.style.transform = `scale(0.5) rotate(0deg)`;
             square.style.boxShadow = 'none';
         });
-        
         if (animationId) {
             cancelAnimationFrame(animationId);
             animationId = null;
@@ -150,9 +144,7 @@ async function checkAuth() {
             loadTests();
             loadMyResults();
             loadLeaderboard();
-            if (currentRole === 'admin') {
-                loadStats();
-            }
+            if (currentRole === 'admin') loadStats();
         } else {
             showAuthPage();
         }
@@ -194,8 +186,26 @@ function showTestPage(test) {
     currentTest = test;
     currentTestId = test.id;
     currentQuestionIndex = 0;
-    userAnswers = {};
+    
+    // Восстанавливаем прогресс, если есть
+    const saved = loadProgress(test.id);
+    if (saved) {
+        userAnswers = saved.answers || {};
+        currentQuestionIndex = saved.currentIndex || 0;
+    } else {
+        userAnswers = {};
+        currentQuestionIndex = 0;
+    }
+    
     testTitle.textContent = test.title;
+    
+    // Запускаем таймер
+    if (test.timeLimit && test.timeLimit > 0) {
+        startTimer(test.timeLimit);
+    } else {
+        timerDisplay.style.display = 'none';
+    }
+    
     renderQuestion();
     updateNavigation();
 }
@@ -207,6 +217,90 @@ function showResultsPage() {
     resultsPage.style.display = 'block';
 }
 
+// ============ ⏱️ ТАЙМЕР ============
+
+function startTimer(minutes) {
+    timeLeft = minutes * 60;
+    testStartTime = Date.now();
+    timerDisplay.style.display = 'block';
+    updateTimerDisplay();
+    
+    if (timerInterval) clearInterval(timerInterval);
+    
+    timerInterval = setInterval(() => {
+        timeLeft--;
+        totalTimeSpent++;
+        updateTimerDisplay();
+        
+        if (timeLeft <= 0) {
+            clearInterval(timerInterval);
+            alert('⏰ Время вышло! Тест будет отправлен автоматически.');
+            submitTest(true);
+        }
+    }, 1000);
+}
+
+function updateTimerDisplay() {
+    const minutes = Math.floor(timeLeft / 60);
+    const seconds = timeLeft % 60;
+    timerValue.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    
+    // Меняем цвет, когда время заканчивается
+    if (timeLeft <= 30) {
+        timerDisplay.style.background = '#fc8181';
+        timerDisplay.style.color = 'white';
+    } else if (timeLeft <= 60) {
+        timerDisplay.style.background = '#fefcbf';
+        timerDisplay.style.color = '#744210';
+    } else {
+        timerDisplay.style.background = '#bee3f8';
+        timerDisplay.style.color = '#2b6cb0';
+    }
+}
+
+function stopTimer() {
+    if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+    }
+    timerDisplay.style.display = 'none';
+}
+
+// ============ 💾 СОХРАНЕНИЕ ПРОГРЕССА ============
+
+function saveProgress() {
+    if (!currentTestId) return;
+    const progress = {
+        testId: currentTestId,
+        answers: userAnswers,
+        currentIndex: currentQuestionIndex,
+        savedAt: Date.now()
+    };
+    localStorage.setItem(`test_progress_${currentTestId}`, JSON.stringify(progress));
+}
+
+function loadProgress(testId) {
+    try {
+        const saved = localStorage.getItem(`test_progress_${testId}`);
+        if (saved) {
+            const progress = JSON.parse(saved);
+            // Проверяем, что прогресс не старше 24 часов
+            if (Date.now() - progress.savedAt < 24 * 60 * 60 * 1000) {
+                return progress;
+            } else {
+                localStorage.removeItem(`test_progress_${testId}`);
+            }
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки прогресса:', error);
+    }
+    return null;
+}
+
+function clearProgress(testId) {
+    localStorage.removeItem(`test_progress_${testId}`);
+}
+
 // ============ ТЕСТЫ ============
 
 async function loadTests() {
@@ -214,7 +308,7 @@ async function loadTests() {
         const response = await fetch('/api/tests');
         if (response.ok) {
             tests = await response.json();
-            console.log('📝 Загружены тесты:', tests);
+            renderCategoryFilter();
             renderTests();
         }
     } catch (error) {
@@ -222,20 +316,31 @@ async function loadTests() {
     }
 }
 
+function renderCategoryFilter() {
+    if (!categoryFilter) return;
+    const categories = [...new Set(tests.map(t => t.category || 'Другое'))];
+    categoryFilter.innerHTML = '<option value="">📚 Все категории</option>' +
+        categories.map(c => `<option value="${c}">${c}</option>`).join('');
+}
+
 function renderTests() {
-    if (!tests || tests.length === 0) {
+    const filter = categoryFilter ? categoryFilter.value : '';
+    const filteredTests = filter ? tests.filter(t => (t.category || 'Другое') === filter) : tests;
+    
+    if (!filteredTests || filteredTests.length === 0) {
         testsList.innerHTML = `
             <div style="text-align: center; padding: 40px; color: #718096;">
                 <p>📭 Нет доступных тестов</p>
-                ${currentRole === 'admin' ? '<p style="font-size: 14px;">Создайте тест на вкладке "Создать тест"</p>' : ''}
             </div>
         `;
         return;
     }
     
     let html = '';
-    tests.forEach((test) => {
+    filteredTests.forEach((test) => {
         const testId = test.id;
+        const savedProgress = loadProgress(testId);
+        const hasProgress = savedProgress && Object.keys(savedProgress.answers || {}).length > 0;
         
         html += `
             <div class="test-card">
@@ -244,13 +349,19 @@ function renderTests() {
                         <h3>${test.title || 'Без названия'}</h3>
                         <p>${test.description || 'Нет описания'}</p>
                         <div class="meta">
-                            ${test.class || '7-8'} класс • ${test.questions?.length || 0} вопросов
+                            <span style="background: #ebf4ff; color: #2b6cb0; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 600;">
+                                ${test.category || 'Другое'}
+                            </span>
+                            • ${test.class || '7-8'} класс • ${test.questions?.length || 0} вопросов
+                            ${test.timeLimit ? ` • ⏱️ ${test.timeLimit} мин` : ''}
                             ${test.createdBy ? ` • Создал: ${test.createdBy}` : ''}
-                            ${test.updatedAt ? ` • Обновлен: ${new Date(test.updatedAt).toLocaleDateString()}` : ''}
+                            ${hasProgress ? ' • 💾 Есть сохранённый прогресс' : ''}
                         </div>
                     </div>
                     <div class="actions">
-                        <button class="btn-primary" data-test-id="${testId}">Пройти тест</button>
+                        <button class="btn-primary" data-test-id="${testId}">
+                            ${hasProgress ? '▶️ Продолжить' : 'Пройти тест'}
+                        </button>
                         ${currentRole === 'admin' ? `
                             <button class="btn-secondary btn-edit" data-test-id="${testId}">✏️</button>
                             <button class="btn-small btn-danger" data-test-id="${testId}">🗑️</button>
@@ -289,40 +400,20 @@ function renderTests() {
 }
 
 async function startTest(testId) {
-    console.log('🔍 startTest начал работу с testId:', testId);
-    
-    if (!testId) {
-        console.error('❌ testId пустой');
-        alert('Ошибка: ID теста не указан');
-        return;
-    }
-    
     try {
-        console.log(`📤 Запрос к /api/tests/${testId}`);
         const response = await fetch(`/api/tests/${testId}`);
-        console.log('📥 Ответ сервера:', response.status);
-        
         if (response.ok) {
             const test = await response.json();
-            console.log('✅ Тест загружен:', test.title);
             showTestPage(test);
         } else {
-            const error = await response.json().catch(() => ({}));
-            console.error('❌ Ошибка загрузки:', error);
-            alert('Ошибка загрузки теста: ' + (error.error || 'Тест не найден'));
+            alert('Ошибка загрузки теста');
         }
     } catch (error) {
-        console.error('❌ Ошибка соединения:', error);
-        alert('Ошибка загрузки теста. Проверьте соединение с сервером.');
+        alert('Ошибка загрузки теста');
     }
 }
 
 async function deleteTest(testId) {
-    if (!testId) {
-        alert('Ошибка: неверный ID теста');
-        return;
-    }
-    
     if (!confirm('Удалить этот тест?')) return;
     
     try {
@@ -335,12 +426,8 @@ async function deleteTest(testId) {
             loadTests();
             if (currentRole === 'admin') loadStats();
             loadLeaderboard();
-        } else {
-            const error = await response.json().catch(() => ({}));
-            alert('Ошибка удаления: ' + (error.error || 'Неизвестная ошибка'));
         }
     } catch (error) {
-        console.error('Ошибка удаления:', error);
         alert('Ошибка удаления');
     }
 }
@@ -348,44 +435,34 @@ async function deleteTest(testId) {
 // ============ РЕДАКТИРОВАНИЕ ТЕСТА ============
 
 async function editTest(testId) {
-    // Проверяем, не открыт ли уже редактор
     if (isEditFormOpen) {
         alert('⚠️ Сначала закройте текущий редактор теста!');
         return;
     }
     
-    console.log('✏️ Редактирование теста:', testId);
-    
     try {
         const response = await fetch(`/api/admin/tests/${testId}/edit`);
         if (response.ok) {
             const test = await response.json();
-            
             const testCard = document.querySelector(`.btn-edit[data-test-id="${testId}"]`)?.closest('.test-card');
             if (testCard) {
-                // Проверяем, нет ли уже формы редактирования
-                const existingForm = document.getElementById('editFormContainer');
-                if (existingForm) {
-                    existingForm.remove();
-                    isEditFormOpen = false;
-                }
-                
                 showEditForm(test, testCard);
                 isEditFormOpen = true;
-            } else {
-                alert('Ошибка: не найден элемент для редактирования');
             }
         } else {
-            alert('Ошибка загрузки теста для редактирования');
+            alert('Ошибка загрузки теста');
         }
     } catch (error) {
-        console.error('Ошибка:', error);
         alert('Ошибка загрузки теста');
     }
 }
 
 function showEditForm(test, testCard) {
-    // Создаем форму редактирования
+    const categories = ['Механика', 'Термодинамика', 'Электричество', 'Оптика', 'Квантовая физика', 'Астрономия', 'Другое'];
+    const categoryOptions = categories.map(c => 
+        `<option value="${c}" ${(test.category || 'Другое') === c ? 'selected' : ''}>${c}</option>`
+    ).join('');
+    
     const editHtml = `
         <div id="editFormContainer" style="margin-top: 15px; padding: 20px; background: #f7fafc; border-radius: 10px; border: 2px solid #667eea;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
@@ -406,6 +483,16 @@ function showEditForm(test, testCard) {
                     <label>Класс</label>
                     <input type="text" id="editTestClass" value="${test.class || '7-8'}">
                 </div>
+                <div class="form-group">
+                    <label>📚 Категория</label>
+                    <select id="editTestCategory" style="width: 100%; padding: 12px; border: 2px solid #e2e8f0; border-radius: 10px; font-size: 16px;">
+                        ${categoryOptions}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>⏱️ Ограничение времени (минут, 0 = без ограничения)</label>
+                    <input type="number" id="editTestTimeLimit" min="0" max="180" value="${test.timeLimit || 0}">
+                </div>
                 <div id="editQuestionsEditor">
                     <h4>Вопросы</h4>
                     <div id="editQuestionsList"></div>
@@ -419,10 +506,8 @@ function showEditForm(test, testCard) {
         </div>
     `;
     
-    // Вставляем форму после карточки теста
     testCard.insertAdjacentHTML('afterend', editHtml);
     
-    // Заполняем вопросы
     const editQuestionsList = document.getElementById('editQuestionsList');
     if (test.questions && test.questions.length > 0) {
         test.questions.forEach((q, index) => {
@@ -430,7 +515,6 @@ function showEditForm(test, testCard) {
         });
     }
     
-    // Обработчики
     document.getElementById('addEditQuestionBtn')?.addEventListener('click', function() {
         const count = editQuestionsList.querySelectorAll('.question-editor').length + 1;
         addEditQuestion(null, count);
@@ -441,13 +525,8 @@ function showEditForm(test, testCard) {
         await saveEditedTest(test.id);
     });
     
-    document.getElementById('cancelEditBtn')?.addEventListener('click', function() {
-        closeEditForm();
-    });
-    
-    document.getElementById('closeEditFormBtn')?.addEventListener('click', function() {
-        closeEditForm();
-    });
+    document.getElementById('cancelEditBtn')?.addEventListener('click', closeEditForm);
+    document.getElementById('closeEditFormBtn')?.addEventListener('click', closeEditForm);
 }
 
 function closeEditForm() {
@@ -464,29 +543,50 @@ function addEditQuestion(questionData, number) {
     if (!list) return;
     
     const q = questionData || {
+        type: 'choice',
         question: '',
         options: ['', '', '', ''],
         correct: 0,
+        correctText: '',
         hint: ''
     };
     
+    const type = q.type || 'choice';
+    const isInput = type === 'input';
+    
     const html = `
-        <div class="question-editor" style="background: white; border-radius: 10px; padding: 15px; margin-bottom: 15px; border: 1px solid #e2e8f0; position: relative;">
+        <div class="question-editor" data-type="${type}" style="background: white; border-radius: 10px; padding: 15px; margin-bottom: 15px; border: 1px solid #e2e8f0; position: relative;">
             <div class="question-number" style="position: absolute; top: -10px; left: 15px; background: #667eea; color: white; padding: 2px 12px; border-radius: 20px; font-size: 12px; font-weight: 600;">
                 Вопрос ${number}
             </div>
             <div class="form-group" style="margin-top: 10px;">
-                <input type="text" class="edit-q-text" placeholder="Введите вопрос" value="${q.question || ''}" required>
-            </div>
-            <div class="options-editor" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0;">
-                <input type="text" class="edit-option-input" placeholder="Вариант A" value="${q.options[0] || ''}" required>
-                <input type="text" class="edit-option-input" placeholder="Вариант B" value="${q.options[1] || ''}" required>
-                <input type="text" class="edit-option-input" placeholder="Вариант C" value="${q.options[2] || ''}" required>
-                <input type="text" class="edit-option-input" placeholder="Вариант D" value="${q.options[3] || ''}" required>
+                <label>Тип вопроса</label>
+                <select class="edit-q-type" style="width: 100%; padding: 8px; border: 1px solid #e2e8f0; border-radius: 6px;">
+                    <option value="choice" ${!isInput ? 'selected' : ''}>📝 С выбором ответа</option>
+                    <option value="input" ${isInput ? 'selected' : ''}>✍️ С вводом ответа</option>
+                </select>
             </div>
             <div class="form-group">
-                <label>Правильный ответ (0-3)</label>
-                <input type="number" class="edit-correct-option" min="0" max="3" value="${q.correct || 0}" required>
+                <input type="text" class="edit-q-text" placeholder="Введите вопрос" value="${q.question || ''}" required>
+            </div>
+            <div class="edit-options-block" style="display: ${isInput ? 'none' : 'block'};">
+                <div class="options-editor" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0;">
+                    <input type="text" class="edit-option-input" placeholder="Вариант A" value="${q.options?.[0] || ''}">
+                    <input type="text" class="edit-option-input" placeholder="Вариант B" value="${q.options?.[1] || ''}">
+                    <input type="text" class="edit-option-input" placeholder="Вариант C" value="${q.options?.[2] || ''}">
+                    <input type="text" class="edit-option-input" placeholder="Вариант D" value="${q.options?.[3] || ''}">
+                </div>
+                <div class="form-group">
+                    <label>Правильный ответ (0-3)</label>
+                    <input type="number" class="edit-correct-option" min="0" max="3" value="${q.correct || 0}">
+                </div>
+            </div>
+            <div class="edit-input-block" style="display: ${isInput ? 'block' : 'none'};">
+                <div class="form-group">
+                    <label>✍️ Правильный текстовый ответ</label>
+                    <input type="text" class="edit-correct-text" placeholder="Например: 12 или м/с" value="${q.correctText || ''}">
+                    <small style="color: #718096; font-size: 12px;">Регистр не важен. Пробелы в начале/конце игнорируются.</small>
+                </div>
             </div>
             <div class="form-group">
                 <label>Подсказка (необязательно)</label>
@@ -499,12 +599,30 @@ function addEditQuestion(questionData, number) {
     `;
     
     list.insertAdjacentHTML('beforeend', html);
+    
+    // Обработчик переключения типа
+    const lastEditor = list.lastElementChild;
+    const typeSelect = lastEditor.querySelector('.edit-q-type');
+    const optionsBlock = lastEditor.querySelector('.edit-options-block');
+    const inputBlock = lastEditor.querySelector('.edit-input-block');
+    
+    typeSelect.addEventListener('change', function() {
+        if (this.value === 'input') {
+            optionsBlock.style.display = 'none';
+            inputBlock.style.display = 'block';
+        } else {
+            optionsBlock.style.display = 'block';
+            inputBlock.style.display = 'none';
+        }
+    });
 }
 
 async function saveEditedTest(testId) {
     const title = document.getElementById('editTestTitle').value.trim();
     const description = document.getElementById('editTestDescription').value.trim();
     const classNum = document.getElementById('editTestClass').value.trim();
+    const category = document.getElementById('editTestCategory').value;
+    const timeLimit = document.getElementById('editTestTimeLimit').value;
     
     if (!title) {
         alert('Введите название теста');
@@ -515,25 +633,29 @@ async function saveEditedTest(testId) {
     const questions = [];
     
     questionElements.forEach(el => {
+        const type = el.querySelector('.edit-q-type').value;
         const qText = el.querySelector('.edit-q-text').value.trim();
-        const options = [];
-        const optionInputs = el.querySelectorAll('.edit-option-input');
-        optionInputs.forEach(input => options.push(input.value.trim()));
-        const correct = parseInt(el.querySelector('.edit-correct-option').value);
         const hint = el.querySelector('.edit-hint-input')?.value || '';
         
-        if (qText && options.length === 4 && options.every(o => o)) {
-            questions.push({ 
-                question: qText, 
-                options, 
-                correct: isNaN(correct) ? 0 : correct,
-                hint 
-            });
+        if (type === 'input') {
+            const correctText = el.querySelector('.edit-correct-text').value.trim();
+            if (qText && correctText) {
+                questions.push({ type: 'input', question: qText, correctText, hint });
+            }
+        } else {
+            const options = [];
+            const optionInputs = el.querySelectorAll('.edit-option-input');
+            optionInputs.forEach(input => options.push(input.value.trim()));
+            const correct = parseInt(el.querySelector('.edit-correct-option').value);
+            
+            if (qText && options.length === 4 && options.every(o => o)) {
+                questions.push({ type: 'choice', question: qText, options, correct, hint });
+            }
         }
     });
     
     if (questions.length === 0) {
-        alert('Добавьте хотя бы один вопрос с 4 вариантами ответов');
+        alert('Добавьте хотя бы один вопрос');
         return;
     }
     
@@ -541,40 +663,32 @@ async function saveEditedTest(testId) {
         const response = await fetch(`/api/tests/${testId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                title, 
-                description, 
-                class: classNum || '7-8', 
-                questions 
-            })
+            body: JSON.stringify({ title, description, class: classNum, category, timeLimit, questions })
         });
         
         if (response.ok) {
-            alert('✅ Тест успешно обновлен!');
+            alert('✅ Тест обновлен!');
             closeEditForm();
-            loadTests();
-            if (currentRole === 'admin') loadStats();
-            loadLeaderboard();
         } else {
-            const data = await response.json();
-            alert(data.error || 'Ошибка обновления теста');
+            alert('Ошибка обновления теста');
         }
     } catch (error) {
-        console.error('Ошибка:', error);
         alert('Ошибка сервера');
     }
 }
 
-// ============ ОТОБРАЖЕНИЕ ВОПРОСОВ С ПОДСКАЗКОЙ ============
+// ============ ОТОБРАЖЕНИЕ ВОПРОСОВ ============
 
 function renderQuestion() {
     if (!currentTest) return;
     
     const q = currentTest.questions[currentQuestionIndex];
     const total = currentTest.questions.length;
+    const isInput = q.type === 'input';
     
     questionCounter.textContent = `Вопрос ${currentQuestionIndex + 1} из ${total}`;
     
+    // Подсказка
     const hasHint = q.hint && q.hint.trim().length > 0;
     hintBtn.style.display = hasHint ? 'inline-block' : 'none';
     hintContainer.style.display = 'none';
@@ -583,27 +697,60 @@ function renderQuestion() {
     let html = `
         <div class="question-item">
             <div class="question-text">${q.question}</div>
-            <div class="options">
-    `;
-    
-    q.options.forEach((option, index) => {
-        const isSelected = userAnswers[currentQuestionIndex] === index;
-        const checked = isSelected ? 'checked' : '';
-        html += `
-            <div class="option ${isSelected ? 'selected' : ''}" onclick="selectOption(${index})">
-                <input type="radio" name="question" value="${index}" ${checked}>
-                <label>${option}</label>
-            </div>
-        `;
-    });
-    
-    html += `
-            </div>
+            ${isInput ? `
+                <div class="input-answer-block" style="margin: 20px 0;">
+                    <input type="text" id="textAnswerInput" class="text-answer-input" 
+                           placeholder="Введите ваш ответ..." 
+                           value="${userAnswers[currentQuestionIndex] || ''}"
+                           autocomplete="off"
+                           style="width: 100%; padding: 15px 20px; font-size: 18px; border: 2px solid #e2e8f0; border-radius: 12px; background: white; transition: all 0.3s;">
+                    <small style="color: #718096; font-size: 13px; display: block; margin-top: 8px;">✍️ Введите ответ и нажмите Enter или кнопку "Далее"</small>
+                </div>
+            ` : `
+                <div class="options">
+                    ${q.options.map((option, index) => {
+                        const isSelected = userAnswers[currentQuestionIndex] === index;
+                        const checked = isSelected ? 'checked' : '';
+                        return `
+                            <div class="option ${isSelected ? 'selected' : ''}" onclick="selectOption(${index})">
+                                <input type="radio" name="question" value="${index}" ${checked}>
+                                <label>${option}</label>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `}
         </div>
     `;
     
     questionContainer.innerHTML = html;
     
+    // Обработчик для текстового поля
+    if (isInput) {
+        const input = document.getElementById('textAnswerInput');
+        if (input) {
+            input.focus();
+            input.addEventListener('input', function() {
+                userAnswers[currentQuestionIndex] = this.value;
+                saveProgress();
+                updateNavigation();
+            });
+            input.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    userAnswers[currentQuestionIndex] = this.value;
+                    saveProgress();
+                    if (currentQuestionIndex < currentTest.questions.length - 1) {
+                        nextQuestion();
+                    } else {
+                        if (allQuestionsAnswered()) submitTest();
+                    }
+                }
+            });
+        }
+    }
+    
+    // Обработчик подсказки
     hintBtn.onclick = function() {
         if (hasHint) {
             hintContainer.style.display = 'block';
@@ -616,6 +763,7 @@ function renderQuestion() {
 
 function selectOption(optionIndex) {
     userAnswers[currentQuestionIndex] = optionIndex;
+    saveProgress();
     
     const options = document.querySelectorAll('.option');
     options.forEach((opt, index) => {
@@ -631,16 +779,24 @@ function selectOption(optionIndex) {
     updateNavigation();
 }
 
+function allQuestionsAnswered() {
+    return currentTest.questions.every((_, index) => {
+        const answer = userAnswers[index];
+        return answer !== undefined && answer !== '';
+    });
+}
+
 function updateNavigation() {
     const total = currentTest.questions.length;
-    const hasAnswer = userAnswers[currentQuestionIndex] !== undefined;
+    const answer = userAnswers[currentQuestionIndex];
+    const hasAnswer = answer !== undefined && answer !== '';
     
     prevBtn.disabled = currentQuestionIndex === 0;
     
     if (currentQuestionIndex === total - 1) {
         nextBtn.style.display = 'none';
         submitBtn.style.display = 'block';
-        submitBtn.disabled = !hasAnswer;
+        submitBtn.disabled = !allQuestionsAnswered();
     } else {
         nextBtn.style.display = 'block';
         submitBtn.style.display = 'none';
@@ -650,6 +806,7 @@ function updateNavigation() {
 function nextQuestion() {
     if (currentQuestionIndex < currentTest.questions.length - 1) {
         currentQuestionIndex++;
+        saveProgress();
         renderQuestion();
         updateNavigation();
     }
@@ -658,20 +815,19 @@ function nextQuestion() {
 function prevQuestion() {
     if (currentQuestionIndex > 0) {
         currentQuestionIndex--;
+        saveProgress();
         renderQuestion();
         updateNavigation();
     }
 }
 
-async function submitTest() {
-    const allAnswered = currentTest.questions.every((_, index) => 
-        userAnswers[index] !== undefined
-    );
-    
-    if (!allAnswered) {
+async function submitTest(autoSubmit = false) {
+    if (!autoSubmit && !allQuestionsAnswered()) {
         alert('Ответьте на все вопросы!');
         return;
     }
+    
+    stopTimer();
     
     const answers = currentTest.questions.map((_, index) => userAnswers[index]);
     
@@ -679,11 +835,12 @@ async function submitTest() {
         const response = await fetch(`/api/tests/${currentTestId}/check`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ answers })
+            body: JSON.stringify({ answers, timeSpent: totalTimeSpent })
         });
         
         if (response.ok) {
             const results = await response.json();
+            clearProgress(currentTestId);
             showResults(results);
             loadMyResults();
             loadLeaderboard();
@@ -693,10 +850,13 @@ async function submitTest() {
     }
 }
 
-// ============ ОТОБРАЖЕНИЕ РЕЗУЛЬТАТОВ С ПОДСКАЗКАМИ ============
+// ============ ОТОБРАЖЕНИЕ РЕЗУЛЬТАТОВ ============
 
 function showResults(results) {
     showResultsPage();
+    
+    const timeStr = results.timeSpent ? 
+        `${Math.floor(results.timeSpent / 60)} мин ${results.timeSpent % 60} сек` : '';
     
     let html = `
         <div class="result-card">
@@ -705,7 +865,8 @@ function showResults(results) {
             <p style="font-size: 1.2em; color: #4a5568; margin: 10px 0;">
                 ${results.percentage}% правильных ответов
             </p>
-            <div style="font-size: 0.9em; color: #718096;">
+            ${timeStr ? `<p style="color: #718096; font-size: 14px;">⏱️ Время: ${timeStr}</p>` : ''}
+            <div style="font-size: 0.9em; color: #718096; margin-top: 10px;">
                 ${results.percentage >= 70 ? '✅ Отличный результат!' : 
                   results.percentage >= 50 ? '📚 Хорошо, но стоит повторить материал' : 
                   '💪 Нужно больше практики!'}
@@ -717,16 +878,17 @@ function showResults(results) {
     
     results.results.forEach((r, index) => {
         const hintHtml = r.hint ? `<div style="font-size: 12px; color: #d69e2e; margin-top: 4px;">💡 Подсказка: ${r.hint}</div>` : '';
+        const typeIcon = r.type === 'input' ? '✍️' : '📝';
         
         html += `
             <div class="answer-detail ${r.isCorrect ? 'correct' : 'wrong'}">
                 <div style="flex: 1;">
-                    <div>${index + 1}. ${r.question}</div>
+                    <div>${typeIcon} ${index + 1}. ${r.question}</div>
                     ${hintHtml}
                 </div>
-                <div style="text-align: right; min-width: 120px;">
+                <div style="text-align: right; min-width: 150px;">
                     ${r.isCorrect ? '✅' : '❌'} 
-                    ${r.isCorrect ? r.userAnswer : `${r.userAnswer} → ${r.correctAnswer}`}
+                    ${r.isCorrect ? r.userAnswer : `<span style="color: #fc8181;">${r.userAnswer}</span> → <span style="color: #48bb78;">${r.correctAnswer}</span>`}
                 </div>
             </div>
         `;
@@ -767,6 +929,7 @@ function renderMyResults(results) {
                     <h4>${r.testTitle}</h4>
                     <div class="meta">
                         ${r.correct} из ${r.total} правильных (${r.percentage}%)
+                        ${r.category ? ` • ${r.category}` : ''}
                         • ${new Date(r.completedAt).toLocaleString()}
                     </div>
                 </div>
@@ -788,7 +951,7 @@ async function loadLeaderboard() {
             renderLeaderboard(data);
         }
     } catch (error) {
-        console.error('Ошибка загрузки таблицы лидеров:', error);
+        console.error('Ошибка загрузки лидеров:', error);
     }
 }
 
@@ -797,7 +960,6 @@ function renderLeaderboard(leaderboard) {
         leaderboardContent.innerHTML = `
             <div style="text-align: center; padding: 40px; color: #718096;">
                 <p>🏆 Пока нет результатов</p>
-                <p style="font-size: 14px;">Пройдите тест, чтобы попасть в таблицу лидеров!</p>
             </div>
         `;
         return;
@@ -824,8 +986,7 @@ function renderLeaderboard(leaderboard) {
                 <div class="info">
                     <div class="name">${item.username}</div>
                     <div class="details">
-                        Лучший результат: ${item.bestTest} • Пройдено тестов: ${item.totalTests}
-                        ${item.completedAt ? ` • ${new Date(item.completedAt).toLocaleDateString()}` : ''}
+                        Лучший: ${item.bestTest} • Тестов: ${item.totalTests}
                     </div>
                 </div>
                 <div class="score ${scoreClass}">${item.bestScore}%</div>
@@ -844,25 +1005,36 @@ createForm.addEventListener('submit', async (e) => {
     const title = document.getElementById('testTitle').value;
     const description = document.getElementById('testDescription').value;
     const classNum = document.getElementById('testClass').value;
+    const category = document.getElementById('testCategory')?.value || 'Другое';
+    const timeLimit = document.getElementById('testTimeLimit')?.value || 0;
     
-    const questionElements = document.querySelectorAll('.question-editor');
+    const questionElements = document.querySelectorAll('#questionsList .question-editor');
     const questions = [];
     
     questionElements.forEach(el => {
-        const qText = el.querySelector('.q-text').value;
-        const options = [];
-        const optionInputs = el.querySelectorAll('.option-input');
-        optionInputs.forEach(input => options.push(input.value));
-        const correct = parseInt(el.querySelector('.correct-option').value);
-        const hint = el.querySelector('.hint-input') ? el.querySelector('.hint-input').value : '';
+        const type = el.querySelector('.q-type')?.value || 'choice';
+        const qText = el.querySelector('.q-text').value.trim();
+        const hint = el.querySelector('.hint-input')?.value || '';
         
-        if (qText && options.length === 4 && options.every(o => o.trim())) {
-            questions.push({ question: qText, options, correct, hint });
+        if (type === 'input') {
+            const correctText = el.querySelector('.correct-text')?.value.trim();
+            if (qText && correctText) {
+                questions.push({ type: 'input', question: qText, correctText, hint });
+            }
+        } else {
+            const options = [];
+            const optionInputs = el.querySelectorAll('.option-input');
+            optionInputs.forEach(input => options.push(input.value.trim()));
+            const correct = parseInt(el.querySelector('.correct-option').value);
+            
+            if (qText && options.length === 4 && options.every(o => o)) {
+                questions.push({ type: 'choice', question: qText, options, correct, hint });
+            }
         }
     });
     
     if (questions.length === 0) {
-        alert('Добавьте хотя бы один вопрос с 4 вариантами ответов');
+        alert('Добавьте хотя бы один вопрос');
         return;
     }
     
@@ -870,21 +1042,19 @@ createForm.addEventListener('submit', async (e) => {
         const response = await fetch('/api/tests', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title, description, class: classNum, questions })
+            body: JSON.stringify({ title, description, class: classNum, category, timeLimit, questions })
         });
         
         if (response.ok) {
-            alert('Тест создан успешно!');
+            alert('Тест создан!');
             createForm.reset();
             questionsList.innerHTML = '';
             questionCounterAdmin = 0;
             loadTests();
             if (currentRole === 'admin') loadStats();
-            loadLeaderboard();
             switchTab('tests');
         } else {
-            const data = await response.json();
-            alert(data.error || 'Ошибка создания теста');
+            alert('Ошибка создания теста');
         }
     } catch (error) {
         alert('Ошибка сервера');
@@ -897,26 +1067,56 @@ addQuestionBtn.addEventListener('click', () => {
         <div class="question-editor">
             <div class="question-number">Вопрос ${questionCounterAdmin}</div>
             <div class="form-group">
-                <input type="text" class="q-text" placeholder="Введите вопрос" required>
-            </div>
-            <div class="options-editor">
-                <input type="text" class="option-input" placeholder="Вариант A" required>
-                <input type="text" class="option-input" placeholder="Вариант B" required>
-                <input type="text" class="option-input" placeholder="Вариант C" required>
-                <input type="text" class="option-input" placeholder="Вариант D" required>
+                <label>Тип вопроса</label>
+                <select class="q-type" style="width: 100%; padding: 8px; border: 1px solid #e2e8f0; border-radius: 6px;">
+                    <option value="choice">📝 С выбором ответа</option>
+                    <option value="input">✍️ С вводом ответа</option>
+                </select>
             </div>
             <div class="form-group">
-                <label>Правильный ответ (0-3)</label>
-                <input type="number" class="correct-option" min="0" max="3" value="0" required>
+                <input type="text" class="q-text" placeholder="Введите вопрос" required>
+            </div>
+            <div class="options-block">
+                <div class="options-editor">
+                    <input type="text" class="option-input" placeholder="Вариант A">
+                    <input type="text" class="option-input" placeholder="Вариант B">
+                    <input type="text" class="option-input" placeholder="Вариант C">
+                    <input type="text" class="option-input" placeholder="Вариант D">
+                </div>
+                <div class="form-group">
+                    <label>Правильный ответ (0-3)</label>
+                    <input type="number" class="correct-option" min="0" max="3" value="0">
+                </div>
+            </div>
+            <div class="input-block" style="display: none;">
+                <div class="form-group">
+                    <label>✍️ Правильный текстовый ответ</label>
+                    <input type="text" class="correct-text" placeholder="Например: 12 или м/с">
+                </div>
             </div>
             <div class="form-group">
                 <label>Подсказка (необязательно)</label>
-                <input type="text" class="hint-input" placeholder="Введите подсказку для этого вопроса">
+                <input type="text" class="hint-input" placeholder="Введите подсказку">
             </div>
-            <button type="button" class="remove-question" onclick="this.parentElement.remove()">✕ Удалить вопрос</button>
+            <button type="button" class="remove-question" onclick="this.parentElement.remove()">✕ Удалить</button>
         </div>
     `;
     questionsList.insertAdjacentHTML('beforeend', html);
+    
+    const lastEditor = questionsList.lastElementChild;
+    const typeSelect = lastEditor.querySelector('.q-type');
+    const optionsBlock = lastEditor.querySelector('.options-block');
+    const inputBlock = lastEditor.querySelector('.input-block');
+    
+    typeSelect.addEventListener('change', function() {
+        if (this.value === 'input') {
+            optionsBlock.style.display = 'none';
+            inputBlock.style.display = 'block';
+        } else {
+            optionsBlock.style.display = 'block';
+            inputBlock.style.display = 'none';
+        }
+    });
 });
 
 // ============ СТАТИСТИКА ============
@@ -934,6 +1134,20 @@ async function loadStats() {
 }
 
 function renderStats(stats) {
+    let categoryHtml = '';
+    if (stats.categoryStats && Object.keys(stats.categoryStats).length > 0) {
+        categoryHtml = `
+            <h4 style="margin-top: 20px; color: #2d3748;">📚 По категориям:</h4>
+            <ul style="list-style: none; padding: 0;">
+                ${Object.entries(stats.categoryStats).map(([cat, data]) => `
+                    <li style="padding: 8px 12px; background: #f7fafc; border-radius: 8px; margin-bottom: 5px;">
+                        <strong>${cat}</strong> — ${data.tests} тестов, ${data.completions} прохождений
+                    </li>
+                `).join('')}
+            </ul>
+        `;
+    }
+    
     statsContent.innerHTML = `
         <div class="stats-grid">
             <div class="stat-card">
@@ -946,15 +1160,10 @@ function renderStats(stats) {
             </div>
             <div class="stat-card">
                 <div class="number">${stats.totalResults || 0}</div>
-                <div class="label">Пройдено тестов</div>
+                <div class="label">Пройдено</div>
             </div>
         </div>
-        ${stats.users && stats.users.length > 0 ? `
-            <h4 style="margin-top: 20px; color: #2d3748;">Пользователи:</h4>
-            <ul style="list-style: none; padding: 0;">
-                ${stats.users.map(u => `<li style="padding: 5px 0; color: #4a5568;">👤 ${u}</li>`).join('')}
-            </ul>
-        ` : ''}
+        ${categoryHtml}
     `;
 }
 
@@ -973,9 +1182,7 @@ function switchTab(tab) {
     
     document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
     const content = document.getElementById(`tab-${tab}`);
-    if (content) {
-        content.classList.add('active');
-    }
+    if (content) content.classList.add('active');
     
     if (tab === 'stats') loadStats();
     if (tab === 'myresults') loadMyResults();
@@ -1010,9 +1217,7 @@ async function login() {
             loadTests();
             loadMyResults();
             loadLeaderboard();
-            if (currentRole === 'admin') {
-                loadStats();
-            }
+            if (currentRole === 'admin') loadStats();
         } else {
             const data = await response.json();
             authError.textContent = data.error || 'Ошибка входа';
@@ -1032,12 +1237,12 @@ async function register() {
     }
     
     if (username.length < 3) {
-        authError.textContent = 'Имя должно быть минимум 3 символа';
+        authError.textContent = 'Имя минимум 3 символа';
         return;
     }
     
     if (password.length < 4) {
-        authError.textContent = 'Пароль должен быть минимум 4 символа';
+        authError.textContent = 'Пароль минимум 4 символа';
         return;
     }
     
@@ -1049,13 +1254,13 @@ async function register() {
         });
         
         if (response.ok) {
-            authError.textContent = 'Регистрация успешна! Теперь войдите.';
+            authError.textContent = 'Регистрация успешна! Войдите.';
             authError.style.color = '#48bb78';
             usernameInput.value = '';
             passwordInput.value = '';
         } else {
             const data = await response.json();
-            authError.textContent = data.error || 'Ошибка регистрации';
+            authError.textContent = data.error || 'Ошибка';
             authError.style.color = '#fc8181';
         }
     } catch (error) {
@@ -1081,15 +1286,21 @@ registerBtn.addEventListener('click', register);
 logoutBtn.addEventListener('click', logout);
 prevBtn.addEventListener('click', prevQuestion);
 nextBtn.addEventListener('click', nextQuestion);
-submitBtn.addEventListener('click', submitTest);
+submitBtn.addEventListener('click', () => submitTest(false));
 backBtn.addEventListener('click', () => {
+    stopTimer();
     showMainPage();
     loadTests();
 });
 backToTestsBtn.addEventListener('click', () => {
+    stopTimer();
     showMainPage();
     loadTests();
 });
+
+if (categoryFilter) {
+    categoryFilter.addEventListener('change', renderTests);
+}
 
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && authPage.style.display !== 'none') {

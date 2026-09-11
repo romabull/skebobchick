@@ -22,6 +22,9 @@ app.use(cors({
     credentials: true
 }));
 
+// ============ 📁 СТАТИЧЕСКИЕ ФАЙЛЫ ============
+app.use(express.static(path.join(__dirname, 'public')));
+
 // ============ 🔥 ПОДКЛЮЧЕНИЕ К FIREBASE ============
 
 let db = null;
@@ -164,6 +167,23 @@ async function createTest(testData) {
     const newTest = { id: testId, ...testData };
     memoryDB.tests[testId] = newTest;
     return newTest;
+}
+
+async function updateTest(testId, testData) {
+    if (firebaseInitialized) {
+        try {
+            await db.collection('tests').doc(String(testId)).update(testData);
+            return true;
+        } catch (error) {
+            console.error('❌ Ошибка обновления теста:', error.message);
+            return false;
+        }
+    }
+    if (memoryDB.tests[testId]) {
+        memoryDB.tests[testId] = { id: testId, ...testData };
+        return true;
+    }
+    return false;
 }
 
 async function deleteTest(testId) {
@@ -380,7 +400,7 @@ app.post('/api/tests', async (req, res) => {
             return res.status(403).json({ error: 'Доступ только для администратора' });
         }
         
-        const { title, description, class: classNum, questions } = req.body;
+        const { title, description, class: classNum, category, timeLimit, questions } = req.body;
         
         if (!title || !questions || !Array.isArray(questions) || questions.length === 0) {
             return res.status(400).json({ error: 'Некорректные данные' });
@@ -390,12 +410,16 @@ app.post('/api/tests', async (req, res) => {
             title,
             description: description || '',
             class: classNum || '7-8',
+            category: category || 'Другое',
+            timeLimit: parseInt(timeLimit) || 0,
             questions: questions.map((q, index) => ({
                 id: index + 1,
+                type: q.type || 'choice', // 'choice' или 'input'
                 question: q.question,
-                options: q.options,
-                correct: parseInt(q.correct),
-                hint: q.hint || ''  // ДОБАВЛЕНО: поле подсказки
+                options: q.type === 'input' ? [] : q.options,
+                correct: q.type === 'input' ? q.correctText : parseInt(q.correct),
+                correctText: q.type === 'input' ? q.correctText : '',
+                hint: q.hint || ''
             })),
             createdBy: decoded.username
         };
@@ -409,6 +433,60 @@ app.post('/api/tests', async (req, res) => {
         res.json({ success: true, testId: created.id, test: created });
     } catch (error) {
         console.error('Ошибка создания теста:', error);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    }
+});
+
+app.put('/api/tests/:id', async (req, res) => {
+    const token = req.cookies.token;
+    if (!token) return res.status(401).json({ error: 'Не авторизован' });
+    
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        if (decoded.role !== 'admin') {
+            return res.status(403).json({ error: 'Доступ только для администратора' });
+        }
+        
+        const testId = req.params.id;
+        const { title, description, class: classNum, category, timeLimit, questions } = req.body;
+        
+        const existingTest = await getTest(testId);
+        if (!existingTest) {
+            return res.status(404).json({ error: 'Тест не найден' });
+        }
+        
+        if (!title || !questions || !Array.isArray(questions) || questions.length === 0) {
+            return res.status(400).json({ error: 'Некорректные данные' });
+        }
+        
+        const updatedTest = {
+            title,
+            description: description || '',
+            class: classNum || '7-8',
+            category: category || 'Другое',
+            timeLimit: parseInt(timeLimit) || 0,
+            questions: questions.map((q, index) => ({
+                id: index + 1,
+                type: q.type || 'choice',
+                question: q.question,
+                options: q.type === 'input' ? [] : q.options,
+                correct: q.type === 'input' ? q.correctText : parseInt(q.correct),
+                correctText: q.type === 'input' ? q.correctText : '',
+                hint: q.hint || ''
+            })),
+            createdBy: existingTest.createdBy || decoded.username,
+            updatedAt: new Date()
+        };
+        
+        const success = await updateTest(testId, updatedTest);
+        if (success) {
+            console.log(`✅ Обновлен тест: ${title}`);
+            res.json({ success: true, message: 'Тест обновлен', test: { id: testId, ...updatedTest } });
+        } else {
+            res.status(500).json({ error: 'Ошибка обновления теста' });
+        }
+    } catch (error) {
+        console.error('Ошибка обновления теста:', error);
         res.status(500).json({ error: 'Ошибка сервера' });
     }
 });
@@ -446,7 +524,7 @@ app.post('/api/tests/:id/check', async (req, res) => {
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
         const testId = req.params.id;
-        const { answers } = req.body;
+        const { answers, timeSpent } = req.body;
         
         const test = await getTest(testId);
         if (!test) {
@@ -456,25 +534,46 @@ app.post('/api/tests/:id/check', async (req, res) => {
         let correct = 0;
         const results = test.questions.map((q, index) => {
             const userAnswer = answers[index];
-            const isCorrect = userAnswer === q.correct;
+            let isCorrect = false;
+            let displayAnswer = '';
+            let correctAnswer = '';
+            
+            if (q.type === 'input') {
+                // Проверка текстового ответа
+                const userText = (userAnswer || '').toString().trim().toLowerCase();
+                const correctText = (q.correctText || '').toString().trim().toLowerCase();
+                isCorrect = userText === correctText;
+                displayAnswer = userAnswer || 'Не отвечено';
+                correctAnswer = q.correctText;
+            } else {
+                // Проверка выбора ответа
+                isCorrect = userAnswer === q.correct;
+                displayAnswer = userAnswer !== undefined ? q.options[userAnswer] : 'Не отвечено';
+                correctAnswer = q.options[q.correct];
+            }
+            
             if (isCorrect) correct++;
+            
             return {
                 questionId: q.id,
+                type: q.type || 'choice',
                 question: q.question,
-                userAnswer: userAnswer !== undefined ? q.options[userAnswer] : 'Не отвечено',
-                correctAnswer: q.options[q.correct],
+                userAnswer: displayAnswer,
+                correctAnswer: correctAnswer,
                 isCorrect,
-                hint: q.hint || ''  // ДОБАВЛЕНО: передаем подсказку в результаты
+                hint: q.hint || ''
             };
         });
         
         const resultData = {
             testId: testId,
             testTitle: test.title,
+            category: test.category || 'Другое',
             username: decoded.username,
             total: test.questions.length,
             correct,
             percentage: Math.round((correct / test.questions.length) * 100),
+            timeSpent: timeSpent || 0,
             results
         };
         
@@ -516,14 +615,34 @@ app.get('/api/admin/stats', async (req, res) => {
         const tests = await getTests();
         const results = await getAllResults();
         
+        // Статистика по категориям
+        const categoryStats = {};
+        tests.forEach(t => {
+            const cat = t.category || 'Другое';
+            if (!categoryStats[cat]) {
+                categoryStats[cat] = { tests: 0, completions: 0 };
+            }
+            categoryStats[cat].tests++;
+        });
+        
+        results.forEach(r => {
+            const cat = r.category || 'Другое';
+            if (categoryStats[cat]) {
+                categoryStats[cat].completions++;
+            }
+        });
+        
         res.json({
             totalUsers: users.length,
             totalTests: tests.length,
             totalResults: results.length,
+            categoryStats,
             tests: tests.map(t => ({
                 id: t.id,
                 title: t.title,
+                category: t.category,
                 questions: t.questions?.length || 0,
+                timeLimit: t.timeLimit || 0,
                 createdBy: t.createdBy
             })),
             users: users.filter(u => u.role !== 'admin').map(u => u.username)
@@ -533,94 +652,7 @@ app.get('/api/admin/stats', async (req, res) => {
         res.status(401).json({ error: 'Не авторизован' });
     }
 });
-// ============ РЕДАКТИРОВАНИЕ ТЕСТА ============
 
-app.put('/api/tests/:id', async (req, res) => {
-    const token = req.cookies.token;
-    if (!token) return res.status(401).json({ error: 'Не авторизован' });
-    
-    try {
-        const decoded = jwt.verify(token, JWT_SECRET);
-        if (decoded.role !== 'admin') {
-            return res.status(403).json({ error: 'Доступ только для администратора' });
-        }
-        
-        const testId = req.params.id;
-        const { title, description, class: classNum, questions } = req.body;
-        
-        // Проверяем существование теста
-        const existingTest = await getTest(testId);
-        if (!existingTest) {
-            return res.status(404).json({ error: 'Тест не найден' });
-        }
-        
-        if (!title || !questions || !Array.isArray(questions) || questions.length === 0) {
-            return res.status(400).json({ error: 'Некорректные данные' });
-        }
-        
-        const updatedTest = {
-            title,
-            description: description || '',
-            class: classNum || '7-8',
-            questions: questions.map((q, index) => ({
-                id: index + 1,
-                question: q.question,
-                options: q.options,
-                correct: parseInt(q.correct),
-                hint: q.hint || ''
-            })),
-            createdBy: existingTest.createdBy || decoded.username,
-            updatedAt: new Date()
-        };
-        
-        // Обновляем в Firebase или памяти
-        if (firebaseInitialized) {
-            try {
-                await db.collection('tests').doc(String(testId)).update(updatedTest);
-                console.log(`✅ Обновлен тест: ${title}`);
-                res.json({ success: true, message: 'Тест обновлен', test: { id: testId, ...updatedTest } });
-            } catch (error) {
-                console.error('❌ Ошибка обновления теста:', error.message);
-                res.status(500).json({ error: 'Ошибка обновления теста' });
-            }
-        } else {
-            // Обновляем в памяти
-            if (memoryDB.tests[testId]) {
-                memoryDB.tests[testId] = { id: testId, ...updatedTest };
-                console.log(`✅ Обновлен тест: ${title}`);
-                res.json({ success: true, message: 'Тест обновлен', test: { id: testId, ...updatedTest } });
-            } else {
-                res.status(404).json({ error: 'Тест не найден' });
-            }
-        }
-    } catch (error) {
-        console.error('Ошибка обновления теста:', error);
-        res.status(500).json({ error: 'Ошибка сервера' });
-    }
-});
-
-// Получение теста для редактирования (с полными данными)
-app.get('/api/admin/tests/:id/edit', async (req, res) => {
-    const token = req.cookies.token;
-    if (!token) return res.status(401).json({ error: 'Не авторизован' });
-    
-    try {
-        const decoded = jwt.verify(token, JWT_SECRET);
-        if (decoded.role !== 'admin') {
-            return res.status(403).json({ error: 'Доступ только для администратора' });
-        }
-        
-        const test = await getTest(req.params.id);
-        if (!test) {
-            return res.status(404).json({ error: 'Тест не найден' });
-        }
-        
-        res.json(test);
-    } catch (error) {
-        console.error('Ошибка получения теста для редактирования:', error);
-        res.status(500).json({ error: 'Ошибка сервера' });
-    }
-});
 // ============ 🏆 ТАБЛИЦА ЛИДЕРОВ ============
 
 app.get('/api/leaderboard', async (req, res) => {
@@ -661,10 +693,32 @@ app.get('/api/leaderboard', async (req, res) => {
     }
 });
 
-// ============ СТАТИЧЕСКИЕ ФАЙЛЫ ============
-// ВАЖНО: Эти маршруты должны быть ПЕРЕД app.get('*')!
+// ============ ПОЛУЧЕНИЕ ТЕСТА ДЛЯ РЕДАКТИРОВАНИЯ ============
 
-// CSS файлы
+app.get('/api/admin/tests/:id/edit', async (req, res) => {
+    const token = req.cookies.token;
+    if (!token) return res.status(401).json({ error: 'Не авторизован' });
+    
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        if (decoded.role !== 'admin') {
+            return res.status(403).json({ error: 'Доступ только для администратора' });
+        }
+        
+        const test = await getTest(req.params.id);
+        if (!test) {
+            return res.status(404).json({ error: 'Тест не найден' });
+        }
+        
+        res.json(test);
+    } catch (error) {
+        console.error('Ошибка получения теста для редактирования:', error);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    }
+});
+
+// ============ СТАТИЧЕСКИЕ ФАЙЛЫ ============
+
 app.get('/style.css', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'style.css'));
 });
@@ -673,7 +727,6 @@ app.get('/admin.css', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'admin.css'));
 });
 
-// JavaScript файлы
 app.get('/script.js', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'script.js'));
 });
@@ -682,18 +735,16 @@ app.get('/admin.js', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'admin.js'));
 });
 
-// HTML страницы
+app.get('/favicon.ico', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'favicon.ico'));
+});
+
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 app.get('/admin', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'admin.html'));
-});
-
-// ВСЕГДА В КОНЦЕ! - Перехватывает только неизвестные маршруты
-app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 app.get('/api/test', (req, res) => {
@@ -707,10 +758,14 @@ app.get('/api/test', (req, res) => {
     });
 });
 
+// ВСЕГДА В КОНЦЕ!
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 // ============ ЗАПУСК ============
 
 async function startServer() {
-    // Создаем тестовых пользователей
     const adminExists = await getUser('admin');
     if (!adminExists) {
         const hashedPassword = await bcrypt.hash('admin123', 10);
@@ -725,39 +780,43 @@ async function startServer() {
         console.log('✅ Создан пользователь: user / user123');
     }
     
-    // Создаем тестовый тест, если тестов нет
     const existingTests = await getTests();
     if (existingTests.length === 0) {
         const testQuestions = [
             {
+                type: 'choice',
                 question: 'Какая формула используется для расчета скорости?',
                 options: ['v = s/t', 'v = t/s', 'v = s*t', 'v = s/t²'],
                 correct: 0,
-                hint: 'Скорость = расстояние / время'  // ДОБАВЛЕНО: подсказка
+                hint: 'Скорость = расстояние / время'
             },
             {
-                question: 'В каких единицах измеряется скорость в системе СИ?',
-                options: ['км/ч', 'м/с', 'см/с', 'м/мин'],
-                correct: 1,
-                hint: 'Основная единица скорости в СИ - метр в секунду'  // ДОБАВЛЕНО: подсказка
+                type: 'input',
+                question: 'В каких единицах измеряется скорость в системе СИ? (напишите сокращённо)',
+                options: [],
+                correctText: 'м/с',
+                hint: 'Метр в секунду'
             },
             {
+                type: 'choice',
                 question: 'По какой формуле вычисляется плотность вещества?',
                 options: ['ρ = V/m', 'ρ = m/V', 'ρ = m*V', 'ρ = V/m²'],
                 correct: 1,
-                hint: 'Плотность = масса / объем'  // ДОБАВЛЕНО: подсказка
+                hint: 'Плотность = масса / объем'
             },
             {
-                question: 'В чем измеряется сила в системе СИ?',
-                options: ['Ньютон', 'Джоуль', 'Ватт', 'Паскаль'],
-                correct: 0,
-                hint: 'Сила измеряется в ньютонах'  // ДОБАВЛЕНО: подсказка
+                type: 'input',
+                question: 'В чем измеряется сила в системе СИ? (напишите одним словом)',
+                options: [],
+                correctText: 'ньютон',
+                hint: 'Названа в честь учёного'
             },
             {
+                type: 'choice',
                 question: 'Какое количество теплоты требуется для нагревания тела?',
                 options: ['Q = cmΔt', 'Q = λm', 'Q = Lm', 'Q = qm'],
                 correct: 0,
-                hint: 'Количество теплоты = удельная теплоемкость × масса × изменение температуры'  // ДОБАВЛЕНО: подсказка
+                hint: 'Количество теплоты = удельная теплоемкость × масса × изменение температуры'
             }
         ];
         
@@ -765,6 +824,8 @@ async function startServer() {
             title: 'Основы физики',
             description: 'Тест по основным формулам и понятиям физики',
             class: '7-8',
+            category: 'Механика',
+            timeLimit: 10,
             questions: testQuestions,
             createdBy: 'admin'
         });
@@ -789,7 +850,6 @@ async function startServer() {
     }
 }
 
-// Для Vercel
 if (process.env.NODE_ENV === 'production') {
     module.exports = app;
 }

@@ -4,10 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Физика - Платформа тестирования</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <!-- 🎨 Квадратики на фоне -->
     <div id="background-squares"></div>
 
     <div id="app">
@@ -44,7 +45,6 @@
                         <button id="logoutBtn" class="btn-small">Выйти</button>
                     </div>
                 </div>
-                <!-- Навигация для админа -->
                 <div id="adminNav" style="display: none;" class="admin-tabs">
                     <button class="tab-btn active" data-tab="tests">📝 Тесты</button>
                     <button class="tab-btn" data-tab="create">➕ Создать тест</button>
@@ -52,7 +52,6 @@
                     <button class="tab-btn" data-tab="myresults">📈 Мои результаты</button>
                     <button class="tab-btn" data-tab="leaderboard">🏆 Лидеры</button>
                 </div>
-                <!-- Навигация для пользователя -->
                 <div id="userNav" style="display: none;" class="admin-tabs">
                     <button class="tab-btn active" data-tab="tests">📝 Доступные тесты</button>
                     <button class="tab-btn" data-tab="myresults">📈 Мои результаты</button>
@@ -62,10 +61,15 @@
 
             <!-- Вкладка: Список тестов -->
             <div id="tab-tests" class="tab-content active">
+                <div style="margin-bottom: 15px;">
+                    <select id="categoryFilter" style="padding: 10px 15px; border: 2px solid #e2e8f0; border-radius: 10px; font-size: 15px; min-width: 200px; cursor: pointer;">
+                        <option value="">📚 Все категории</option>
+                    </select>
+                </div>
                 <div id="testsList"></div>
             </div>
 
-            <!-- Вкладка: Создание теста (только админ) -->
+            <!-- Вкладка: Создание теста -->
             <div id="tab-create" class="tab-content">
                 <h2>Создать новый тест</h2>
                 <form id="createTestForm">
@@ -81,16 +85,32 @@
                         <label>Класс</label>
                         <input type="text" id="testClass" placeholder="7-8" value="7-8">
                     </div>
+                    <div class="form-group">
+                        <label>📚 Категория</label>
+                        <select id="testCategory" style="width: 100%; padding: 12px; border: 2px solid #e2e8f0; border-radius: 10px; font-size: 16px;">
+                            <option value="Механика">Механика</option>
+                            <option value="Термодинамика">Термодинамика</option>
+                            <option value="Электричество">Электричество</option>
+                            <option value="Оптика">Оптика</option>
+                            <option value="Квантовая физика">Квантовая физика</option>
+                            <option value="Астрономия">Астрономия</option>
+                            <option value="Другое" selected>Другое</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>⏱️ Ограничение времени (минут, 0 = без ограничения)</label>
+                        <input type="number" id="testTimeLimit" min="0" max="180" value="0">
+                    </div>
                     <div id="questionsEditor">
                         <h3>Вопросы</h3>
                         <div id="questionsList"></div>
                         <button type="button" id="addQuestionBtn" class="btn-secondary">+ Добавить вопрос</button>
                     </div>
-                    <button type="submit" class="btn-primary">Создать тест</button>
+                    <button type="submit" class="btn-primary" style="margin-top: 20px;">Создать тест</button>
                 </form>
             </div>
 
-            <!-- Вкладка: Статистика (только админ) -->
+            <!-- Вкладка: Статистика -->
             <div id="tab-stats" class="tab-content">
                 <h2>📊 Статистика платформы</h2>
                 <div id="statsContent"></div>
@@ -115,18 +135,17 @@
                 <div class="header-content">
                     <button id="backBtn" class="btn-small">← Назад</button>
                     <h1 id="testTitle"></h1>
-                    <div></div>
+                    <div id="timerDisplay" style="display: none; padding: 8px 20px; border-radius: 10px; font-size: 20px; font-weight: 700; background: #bee3f8; color: #2b6cb0;">
+                        ⏱️ <span id="timerValue">00:00</span>
+                    </div>
                 </div>
                 <div class="progress-info">
                     <span id="questionCounter">Вопрос 1 из 5</span>
                 </div>
             </header>
 
-            <div id="questionContainer">
-                <!-- Вопросы -->
-            </div>
+            <div id="questionContainer"></div>
 
-            <!-- Подсказка -->
             <div style="text-align: center; margin: 10px 0;">
                 <button id="hintBtn" class="btn-secondary" style="display: none;">💡 Подсказка</button>
             </div>
