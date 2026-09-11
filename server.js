@@ -607,6 +607,7 @@ app.get('/api/leaderboard', async (req, res) => {
 
 // ============ 📞 АУДИОЗВОНКИ ============
 
+// Создать комнату
 app.post('/api/calls/rooms', async (req, res) => {
     const token = req.cookies.token;
     if (!token) return res.status(401).json({ error: 'Не авторизован' });
@@ -637,6 +638,7 @@ app.post('/api/calls/rooms', async (req, res) => {
     }
 });
 
+// Получить список комнат (ИСПРАВЛЕНО)
 app.get('/api/calls/rooms', async (req, res) => {
     const token = req.cookies.token;
     if (!token) return res.status(401).json({ error: 'Не авторизован' });
@@ -646,15 +648,39 @@ app.get('/api/calls/rooms', async (req, res) => {
         
         if (firebaseInitialized) {
             const snapshot = await db.collection('callRooms').get();
-            snapshot.forEach(doc => rooms.push({ id: doc.id, ...doc.data() }));
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                // ✅ Конвертируем Firestore Timestamp в ISO-строку
+                let createdAt = data.createdAt;
+                if (createdAt && typeof createdAt.toDate === 'function') {
+                    createdAt = createdAt.toDate().toISOString();
+                } else if (createdAt && createdAt._seconds) {
+                    createdAt = new Date(createdAt._seconds * 1000).toISOString();
+                } else if (!createdAt) {
+                    createdAt = new Date().toISOString();
+                }
+                
+                rooms.push({ 
+                    id: doc.id, 
+                    ...data,
+                    createdAt 
+                });
+            });
         } else {
             rooms = Object.values(memoryDB.callRooms || {});
         }
         
-        const oneHourAgo = Date.now() - 3600000;
-        rooms = rooms.filter(r => new Date(r.createdAt).getTime() > oneHourAgo);
+        // ✅ Фильтр по времени — 24 часа (было 1 час)
+        const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+        rooms = rooms.filter(r => {
+            const time = new Date(r.createdAt).getTime();
+            return isNaN(time) || time > oneDayAgo;
+        });
+        
+        // ✅ Сортируем: новые сверху
         rooms.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         
+        console.log(`📋 Возвращаем ${rooms.length} комнат`);
         res.json(rooms);
     } catch (error) {
         console.error('Ошибка получения комнат:', error);
@@ -662,6 +688,7 @@ app.get('/api/calls/rooms', async (req, res) => {
     }
 });
 
+// Удалить комнату
 app.delete('/api/calls/rooms/:id', async (req, res) => {
     const token = req.cookies.token;
     if (!token) return res.status(401).json({ error: 'Не авторизован' });
@@ -678,6 +705,7 @@ app.delete('/api/calls/rooms/:id', async (req, res) => {
             }
             await db.collection('callRooms').doc(roomId).delete();
             
+            // Удаляем связанные сигналы
             const signals = await db.collection('callSignals').where('roomId', '==', roomId).get();
             signals.forEach(async (s) => await s.ref.delete());
         } else {
@@ -697,6 +725,7 @@ app.delete('/api/calls/rooms/:id', async (req, res) => {
     }
 });
 
+// Отправить сигнал
 app.post('/api/calls/signal', async (req, res) => {
     const token = req.cookies.token;
     if (!token) return res.status(401).json({ error: 'Не авторизован' });
@@ -727,6 +756,7 @@ app.post('/api/calls/signal', async (req, res) => {
     }
 });
 
+// Получить сигналы
 app.get('/api/calls/signal/:roomId', async (req, res) => {
     const token = req.cookies.token;
     if (!token) return res.status(401).json({ error: 'Не авторизован' });
@@ -744,15 +774,30 @@ app.get('/api/calls/signal/:roomId', async (req, res) => {
             const oneMinuteAgo = Date.now() - 60000;
             snapshot.forEach(doc => {
                 const s = { id: doc.id, ...doc.data() };
-                const time = new Date(s.createdAt).getTime();
                 
-                if (time < oneMinuteAgo) {
+                // Конвертируем timestamp
+                let createdAt = s.createdAt;
+                if (createdAt && typeof createdAt.toDate === 'function') {
+                    createdAt = createdAt.toDate().getTime();
+                } else if (createdAt && createdAt._seconds) {
+                    createdAt = createdAt._seconds * 1000;
+                } else if (typeof createdAt === 'number') {
+                    // уже число
+                } else {
+                    createdAt = Date.now();
+                }
+                
+                // Удаляем старые сигналы
+                if (createdAt < oneMinuteAgo) {
                     doc.ref.delete();
                     return;
                 }
                 
+                // Только для меня или для всех
                 if ((s.to === null || s.to === decoded.username) && s.from !== decoded.username) {
-                    if (!lastTime || time > parseInt(lastTime)) signals.push(s);
+                    if (!lastTime || createdAt > parseInt(lastTime)) {
+                        signals.push({ ...s, createdAt });
+                    }
                 }
             });
         } else {
