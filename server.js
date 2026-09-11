@@ -14,8 +14,8 @@ const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'physics_platform_secret_2026';
 
 // Middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 app.use(cors({
     origin: process.env.NODE_ENV === 'production' ? false : '*',
@@ -79,6 +79,8 @@ const memoryDB = {
     users: {},
     tests: {},
     results: {},
+    callRooms: {},
+    callSignals: [],
     testIdCounter: 1
 };
 
@@ -88,9 +90,7 @@ async function getUser(username) {
     if (firebaseInitialized) {
         try {
             const doc = await db.collection('users').doc(username).get();
-            if (doc.exists) {
-                return doc.data();
-            }
+            if (doc.exists) return doc.data();
         } catch (error) {
             console.error('❌ Ошибка получения пользователя:', error.message);
         }
@@ -102,22 +102,14 @@ async function createUser(username, password, role = 'user') {
     if (firebaseInitialized) {
         try {
             await db.collection('users').doc(username).set({
-                username,
-                password,
-                role,
-                created: new Date()
+                username, password, role, created: new Date()
             });
             return true;
         } catch (error) {
             console.error('❌ Ошибка создания пользователя:', error.message);
         }
     }
-    memoryDB.users[username] = {
-        username,
-        password,
-        role,
-        created: new Date()
-    };
+    memoryDB.users[username] = { username, password, role, created: new Date() };
     return true;
 }
 
@@ -126,9 +118,7 @@ async function getTests() {
         try {
             const snapshot = await db.collection('tests').get();
             const tests = [];
-            snapshot.forEach(doc => {
-                tests.push({ id: doc.id, ...doc.data() });
-            });
+            snapshot.forEach(doc => tests.push({ id: doc.id, ...doc.data() }));
             return tests;
         } catch (error) {
             console.error('❌ Ошибка получения тестов:', error.message);
@@ -141,9 +131,7 @@ async function getTest(testId) {
     if (firebaseInitialized) {
         try {
             const doc = await db.collection('tests').doc(String(testId)).get();
-            if (doc.exists) {
-                return { id: doc.id, ...doc.data() };
-            }
+            if (doc.exists) return { id: doc.id, ...doc.data() };
         } catch (error) {
             console.error('❌ Ошибка получения теста:', error.message);
         }
@@ -155,8 +143,7 @@ async function createTest(testData) {
     if (firebaseInitialized) {
         try {
             const docRef = await db.collection('tests').add({
-                ...testData,
-                createdAt: new Date()
+                ...testData, createdAt: new Date()
             });
             return { id: docRef.id, ...testData };
         } catch (error) {
@@ -203,22 +190,15 @@ async function saveResult(username, resultData) {
     if (firebaseInitialized) {
         try {
             await db.collection('results').add({
-                username,
-                ...resultData,
-                completedAt: new Date()
+                username, ...resultData, completedAt: new Date()
             });
             return true;
         } catch (error) {
             console.error('❌ Ошибка сохранения результата:', error.message);
         }
     }
-    if (!memoryDB.results[username]) {
-        memoryDB.results[username] = [];
-    }
-    memoryDB.results[username].push({
-        ...resultData,
-        completedAt: new Date()
-    });
+    if (!memoryDB.results[username]) memoryDB.results[username] = [];
+    memoryDB.results[username].push({ ...resultData, completedAt: new Date() });
     return true;
 }
 
@@ -226,12 +206,9 @@ async function getUserResults(username) {
     if (firebaseInitialized) {
         try {
             const snapshot = await db.collection('results')
-                .where('username', '==', username)
-                .get();
+                .where('username', '==', username).get();
             const results = [];
-            snapshot.forEach(doc => {
-                results.push({ id: doc.id, ...doc.data() });
-            });
+            snapshot.forEach(doc => results.push({ id: doc.id, ...doc.data() }));
             return results;
         } catch (error) {
             console.error('❌ Ошибка получения результатов:', error.message);
@@ -245,9 +222,7 @@ async function getAllUsers() {
         try {
             const snapshot = await db.collection('users').get();
             const users = [];
-            snapshot.forEach(doc => {
-                users.push(doc.data());
-            });
+            snapshot.forEach(doc => users.push(doc.data()));
             return users;
         } catch (error) {
             console.error('❌ Ошибка получения пользователей:', error.message);
@@ -261,18 +236,14 @@ async function getAllResults() {
         try {
             const snapshot = await db.collection('results').get();
             const results = [];
-            snapshot.forEach(doc => {
-                results.push({ id: doc.id, ...doc.data() });
-            });
+            snapshot.forEach(doc => results.push({ id: doc.id, ...doc.data() }));
             return results;
         } catch (error) {
             console.error('❌ Ошибка получения результатов:', error.message);
         }
     }
     const allResults = [];
-    Object.values(memoryDB.results).forEach(userResults => {
-        allResults.push(...userResults);
-    });
+    Object.values(memoryDB.results).forEach(userResults => allResults.push(...userResults));
     return allResults;
 }
 
@@ -287,15 +258,10 @@ app.use((req, res, next) => {
 app.post('/api/register', async (req, res) => {
     try {
         const { username, password, role = 'user' } = req.body;
-        
-        if (!username || !password) {
-            return res.status(400).json({ error: 'Заполните все поля' });
-        }
+        if (!username || !password) return res.status(400).json({ error: 'Заполните все поля' });
         
         const existingUser = await getUser(username);
-        if (existingUser) {
-            return res.status(400).json({ error: 'Пользователь уже существует' });
-        }
+        if (existingUser) return res.status(400).json({ error: 'Пользователь уже существует' });
         
         if (username.length < 3 || password.length < 4) {
             return res.status(400).json({ error: 'Имя минимум 3 символа, пароль - 4' });
@@ -303,7 +269,6 @@ app.post('/api/register', async (req, res) => {
         
         const hashedPassword = await bcrypt.hash(password, 10);
         await createUser(username, hashedPassword, role);
-        
         res.json({ success: true, message: 'Регистрация успешна!', role });
     } catch (error) {
         console.error('Ошибка регистрации:', error);
@@ -314,25 +279,18 @@ app.post('/api/register', async (req, res) => {
 app.post('/api/login', async (req, res) => {
     try {
         const { username, password } = req.body;
-        
         const user = await getUser(username);
-        if (!user) {
-            return res.status(400).json({ error: 'Пользователь не найден' });
-        }
+        if (!user) return res.status(400).json({ error: 'Пользователь не найден' });
         
         const validPassword = await bcrypt.compare(password, user.password);
-        if (!validPassword) {
-            return res.status(400).json({ error: 'Неверный пароль' });
-        }
+        if (!validPassword) return res.status(400).json({ error: 'Неверный пароль' });
         
         const token = jwt.sign({ username, role: user.role }, JWT_SECRET, { expiresIn: '24h' });
         res.cookie('token', token, { 
-            httpOnly: true, 
-            maxAge: 86400000,
+            httpOnly: true, maxAge: 86400000,
             sameSite: 'lax',
             secure: process.env.NODE_ENV === 'production'
         });
-        
         res.json({ success: true, username, role: user.role });
     } catch (error) {
         console.error('Ошибка входа:', error);
@@ -347,10 +305,7 @@ app.post('/api/logout', (req, res) => {
 
 app.get('/api/me', (req, res) => {
     const token = req.cookies.token;
-    if (!token) {
-        return res.status(401).json({ error: 'Не авторизован' });
-    }
-    
+    if (!token) return res.status(401).json({ error: 'Не авторизован' });
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
         res.json({ username: decoded.username, role: decoded.role });
@@ -364,7 +319,6 @@ app.get('/api/me', (req, res) => {
 app.get('/api/tests', async (req, res) => {
     const token = req.cookies.token;
     if (!token) return res.status(401).json({ error: 'Не авторизован' });
-    
     try {
         jwt.verify(token, JWT_SECRET);
         const tests = await getTests();
@@ -377,13 +331,10 @@ app.get('/api/tests', async (req, res) => {
 app.get('/api/tests/:id', async (req, res) => {
     const token = req.cookies.token;
     if (!token) return res.status(401).json({ error: 'Не авторизован' });
-    
     try {
         jwt.verify(token, JWT_SECRET);
         const test = await getTest(req.params.id);
-        if (!test) {
-            return res.status(404).json({ error: 'Тест не найден' });
-        }
+        if (!test) return res.status(404).json({ error: 'Тест не найден' });
         res.json(test);
     } catch (error) {
         res.status(401).json({ error: 'Не авторизован' });
@@ -393,15 +344,11 @@ app.get('/api/tests/:id', async (req, res) => {
 app.post('/api/tests', async (req, res) => {
     const token = req.cookies.token;
     if (!token) return res.status(401).json({ error: 'Не авторизован' });
-    
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
-        if (decoded.role !== 'admin') {
-            return res.status(403).json({ error: 'Доступ только для администратора' });
-        }
+        if (decoded.role !== 'admin') return res.status(403).json({ error: 'Доступ только для администратора' });
         
         const { title, description, class: classNum, category, timeLimit, questions } = req.body;
-        
         if (!title || !questions || !Array.isArray(questions) || questions.length === 0) {
             return res.status(400).json({ error: 'Некорректные данные' });
         }
@@ -414,7 +361,7 @@ app.post('/api/tests', async (req, res) => {
             timeLimit: parseInt(timeLimit) || 0,
             questions: questions.map((q, index) => ({
                 id: index + 1,
-                type: q.type || 'choice', // 'choice' или 'input'
+                type: q.type || 'choice',
                 question: q.question,
                 options: q.type === 'input' ? [] : q.options,
                 correct: q.type === 'input' ? q.correctText : parseInt(q.correct),
@@ -425,9 +372,7 @@ app.post('/api/tests', async (req, res) => {
         };
         
         const created = await createTest(newTest);
-        if (!created) {
-            return res.status(500).json({ error: 'Ошибка создания теста' });
-        }
+        if (!created) return res.status(500).json({ error: 'Ошибка создания теста' });
         
         console.log(`✅ Создан тест: ${title}`);
         res.json({ success: true, testId: created.id, test: created });
@@ -440,20 +385,15 @@ app.post('/api/tests', async (req, res) => {
 app.put('/api/tests/:id', async (req, res) => {
     const token = req.cookies.token;
     if (!token) return res.status(401).json({ error: 'Не авторизован' });
-    
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
-        if (decoded.role !== 'admin') {
-            return res.status(403).json({ error: 'Доступ только для администратора' });
-        }
+        if (decoded.role !== 'admin') return res.status(403).json({ error: 'Доступ только для администратора' });
         
         const testId = req.params.id;
         const { title, description, class: classNum, category, timeLimit, questions } = req.body;
         
         const existingTest = await getTest(testId);
-        if (!existingTest) {
-            return res.status(404).json({ error: 'Тест не найден' });
-        }
+        if (!existingTest) return res.status(404).json({ error: 'Тест не найден' });
         
         if (!title || !questions || !Array.isArray(questions) || questions.length === 0) {
             return res.status(400).json({ error: 'Некорректные данные' });
@@ -494,18 +434,13 @@ app.put('/api/tests/:id', async (req, res) => {
 app.delete('/api/tests/:id', async (req, res) => {
     const token = req.cookies.token;
     if (!token) return res.status(401).json({ error: 'Не авторизован' });
-    
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
-        if (decoded.role !== 'admin') {
-            return res.status(403).json({ error: 'Доступ только для администратора' });
-        }
+        if (decoded.role !== 'admin') return res.status(403).json({ error: 'Доступ только для администратора' });
         
         const testId = req.params.id;
         const test = await getTest(testId);
-        if (!test) {
-            return res.status(404).json({ error: 'Тест не найден' });
-        }
+        if (!test) return res.status(404).json({ error: 'Тест не найден' });
         
         await deleteTest(testId);
         res.json({ success: true, message: 'Тест удален' });
@@ -520,16 +455,13 @@ app.delete('/api/tests/:id', async (req, res) => {
 app.post('/api/tests/:id/check', async (req, res) => {
     const token = req.cookies.token;
     if (!token) return res.status(401).json({ error: 'Не авторизован' });
-    
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
         const testId = req.params.id;
         const { answers, timeSpent } = req.body;
         
         const test = await getTest(testId);
-        if (!test) {
-            return res.status(404).json({ error: 'Тест не найден' });
-        }
+        if (!test) return res.status(404).json({ error: 'Тест не найден' });
         
         let correct = 0;
         const results = test.questions.map((q, index) => {
@@ -539,14 +471,12 @@ app.post('/api/tests/:id/check', async (req, res) => {
             let correctAnswer = '';
             
             if (q.type === 'input') {
-                // Проверка текстового ответа
                 const userText = (userAnswer || '').toString().trim().toLowerCase();
                 const correctText = (q.correctText || '').toString().trim().toLowerCase();
                 isCorrect = userText === correctText;
                 displayAnswer = userAnswer || 'Не отвечено';
                 correctAnswer = q.correctText;
             } else {
-                // Проверка выбора ответа
                 isCorrect = userAnswer === q.correct;
                 displayAnswer = userAnswer !== undefined ? q.options[userAnswer] : 'Не отвечено';
                 correctAnswer = q.options[q.correct];
@@ -578,7 +508,6 @@ app.post('/api/tests/:id/check', async (req, res) => {
         };
         
         await saveResult(decoded.username, resultData);
-        
         res.json(resultData);
     } catch (error) {
         console.error('Ошибка проверки теста:', error);
@@ -589,7 +518,6 @@ app.post('/api/tests/:id/check', async (req, res) => {
 app.get('/api/results', async (req, res) => {
     const token = req.cookies.token;
     if (!token) return res.status(401).json({ error: 'Не авторизован' });
-    
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
         const userResults = await getUserResults(decoded.username);
@@ -604,32 +532,24 @@ app.get('/api/results', async (req, res) => {
 app.get('/api/admin/stats', async (req, res) => {
     const token = req.cookies.token;
     if (!token) return res.status(401).json({ error: 'Не авторизован' });
-    
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
-        if (decoded.role !== 'admin') {
-            return res.status(403).json({ error: 'Доступ только для администратора' });
-        }
+        if (decoded.role !== 'admin') return res.status(403).json({ error: 'Доступ только для администратора' });
         
         const users = await getAllUsers();
         const tests = await getTests();
         const results = await getAllResults();
         
-        // Статистика по категориям
         const categoryStats = {};
         tests.forEach(t => {
             const cat = t.category || 'Другое';
-            if (!categoryStats[cat]) {
-                categoryStats[cat] = { tests: 0, completions: 0 };
-            }
+            if (!categoryStats[cat]) categoryStats[cat] = { tests: 0, completions: 0 };
             categoryStats[cat].tests++;
         });
         
         results.forEach(r => {
             const cat = r.category || 'Другое';
-            if (categoryStats[cat]) {
-                categoryStats[cat].completions++;
-            }
+            if (categoryStats[cat]) categoryStats[cat].completions++;
         });
         
         res.json({
@@ -638,12 +558,9 @@ app.get('/api/admin/stats', async (req, res) => {
             totalResults: results.length,
             categoryStats,
             tests: tests.map(t => ({
-                id: t.id,
-                title: t.title,
-                category: t.category,
+                id: t.id, title: t.title, category: t.category,
                 questions: t.questions?.length || 0,
-                timeLimit: t.timeLimit || 0,
-                createdBy: t.createdBy
+                timeLimit: t.timeLimit || 0, createdBy: t.createdBy
             })),
             users: users.filter(u => u.role !== 'admin').map(u => u.username)
         });
@@ -659,28 +576,23 @@ app.get('/api/leaderboard', async (req, res) => {
     try {
         const results = await getAllResults();
         const leaderboard = [];
-        
         const userResults = {};
+        
         results.forEach(r => {
-            if (!userResults[r.username]) {
-                userResults[r.username] = [];
-            }
+            if (!userResults[r.username]) userResults[r.username] = [];
             userResults[r.username].push(r);
         });
         
         Object.keys(userResults).forEach(username => {
-            const userResultsList = userResults[username];
-            if (userResultsList && userResultsList.length > 0) {
-                const bestResult = userResultsList.reduce((best, current) => {
-                    return (current.percentage > best.percentage) ? current : best;
-                }, userResultsList[0]);
-                
+            const list = userResults[username];
+            if (list && list.length > 0) {
+                const best = list.reduce((b, c) => (c.percentage > b.percentage) ? c : b, list[0]);
                 leaderboard.push({
-                    username: username,
-                    bestScore: bestResult.percentage,
-                    totalTests: userResultsList.length,
-                    bestTest: bestResult.testTitle,
-                    completedAt: bestResult.completedAt
+                    username,
+                    bestScore: best.percentage,
+                    totalTests: list.length,
+                    bestTest: best.testTitle,
+                    completedAt: best.completedAt
                 });
             }
         });
@@ -688,8 +600,177 @@ app.get('/api/leaderboard', async (req, res) => {
         leaderboard.sort((a, b) => b.bestScore - a.bestScore);
         res.json(leaderboard);
     } catch (error) {
-        console.error('Ошибка получения таблицы лидеров:', error);
-        res.status(500).json({ error: 'Ошибка получения таблицы лидеров' });
+        console.error('Ошибка получения лидеров:', error);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    }
+});
+
+// ============ 📞 АУДИОЗВОНКИ ============
+
+app.post('/api/calls/rooms', async (req, res) => {
+    const token = req.cookies.token;
+    if (!token) return res.status(401).json({ error: 'Не авторизован' });
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        const { name } = req.body;
+        
+        const roomId = 'room_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+        const room = {
+            id: roomId,
+            name: name || `Звонок ${decoded.username}`,
+            createdBy: decoded.username,
+            createdAt: new Date(),
+            active: true
+        };
+        
+        if (firebaseInitialized) {
+            await db.collection('callRooms').doc(roomId).set(room);
+        } else {
+            memoryDB.callRooms[roomId] = room;
+        }
+        
+        console.log(`📞 Создана комната: ${room.name}`);
+        res.json({ success: true, room });
+    } catch (error) {
+        console.error('Ошибка создания комнаты:', error);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    }
+});
+
+app.get('/api/calls/rooms', async (req, res) => {
+    const token = req.cookies.token;
+    if (!token) return res.status(401).json({ error: 'Не авторизован' });
+    try {
+        jwt.verify(token, JWT_SECRET);
+        let rooms = [];
+        
+        if (firebaseInitialized) {
+            const snapshot = await db.collection('callRooms').get();
+            snapshot.forEach(doc => rooms.push({ id: doc.id, ...doc.data() }));
+        } else {
+            rooms = Object.values(memoryDB.callRooms || {});
+        }
+        
+        const oneHourAgo = Date.now() - 3600000;
+        rooms = rooms.filter(r => new Date(r.createdAt).getTime() > oneHourAgo);
+        rooms.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        
+        res.json(rooms);
+    } catch (error) {
+        console.error('Ошибка получения комнат:', error);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    }
+});
+
+app.delete('/api/calls/rooms/:id', async (req, res) => {
+    const token = req.cookies.token;
+    if (!token) return res.status(401).json({ error: 'Не авторизован' });
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        const roomId = req.params.id;
+        
+        if (firebaseInitialized) {
+            const doc = await db.collection('callRooms').doc(roomId).get();
+            if (!doc.exists) return res.status(404).json({ error: 'Комната не найдена' });
+            const room = doc.data();
+            if (room.createdBy !== decoded.username && decoded.role !== 'admin') {
+                return res.status(403).json({ error: 'Нет прав' });
+            }
+            await db.collection('callRooms').doc(roomId).delete();
+            
+            const signals = await db.collection('callSignals').where('roomId', '==', roomId).get();
+            signals.forEach(async (s) => await s.ref.delete());
+        } else {
+            if (!memoryDB.callRooms[roomId]) return res.status(404).json({ error: 'Комната не найдена' });
+            const room = memoryDB.callRooms[roomId];
+            if (room.createdBy !== decoded.username && decoded.role !== 'admin') {
+                return res.status(403).json({ error: 'Нет прав' });
+            }
+            delete memoryDB.callRooms[roomId];
+            memoryDB.callSignals = memoryDB.callSignals.filter(s => s.roomId !== roomId);
+        }
+        
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Ошибка удаления комнаты:', error);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    }
+});
+
+app.post('/api/calls/signal', async (req, res) => {
+    const token = req.cookies.token;
+    if (!token) return res.status(401).json({ error: 'Не авторизован' });
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        const { roomId, type, data, to } = req.body;
+        
+        const signal = {
+            roomId,
+            from: decoded.username,
+            to: to || null,
+            type,
+            data: JSON.stringify(data),
+            createdAt: new Date()
+        };
+        
+        if (firebaseInitialized) {
+            await db.collection('callSignals').add(signal);
+        } else {
+            signal.createdAt = Date.now();
+            memoryDB.callSignals.push(signal);
+        }
+        
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Ошибка отправки сигнала:', error);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    }
+});
+
+app.get('/api/calls/signal/:roomId', async (req, res) => {
+    const token = req.cookies.token;
+    if (!token) return res.status(401).json({ error: 'Не авторизован' });
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        const { roomId } = req.params;
+        const { lastTime } = req.query;
+        
+        let signals = [];
+        
+        if (firebaseInitialized) {
+            const snapshot = await db.collection('callSignals')
+                .where('roomId', '==', roomId).get();
+            
+            const oneMinuteAgo = Date.now() - 60000;
+            snapshot.forEach(doc => {
+                const s = { id: doc.id, ...doc.data() };
+                const time = new Date(s.createdAt).getTime();
+                
+                if (time < oneMinuteAgo) {
+                    doc.ref.delete();
+                    return;
+                }
+                
+                if ((s.to === null || s.to === decoded.username) && s.from !== decoded.username) {
+                    if (!lastTime || time > parseInt(lastTime)) signals.push(s);
+                }
+            });
+        } else {
+            const oneMinuteAgo = Date.now() - 60000;
+            memoryDB.callSignals = memoryDB.callSignals.filter(s => s.createdAt > oneMinuteAgo);
+            
+            signals = memoryDB.callSignals.filter(s => 
+                s.roomId === roomId && 
+                s.from !== decoded.username &&
+                (s.to === null || s.to === decoded.username) &&
+                (!lastTime || s.createdAt > parseInt(lastTime))
+            );
+        }
+        
+        res.json(signals);
+    } catch (error) {
+        console.error('Ошибка получения сигналов:', error);
+        res.status(500).json({ error: 'Ошибка сервера' });
     }
 });
 
@@ -698,21 +779,15 @@ app.get('/api/leaderboard', async (req, res) => {
 app.get('/api/admin/tests/:id/edit', async (req, res) => {
     const token = req.cookies.token;
     if (!token) return res.status(401).json({ error: 'Не авторизован' });
-    
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
-        if (decoded.role !== 'admin') {
-            return res.status(403).json({ error: 'Доступ только для администратора' });
-        }
+        if (decoded.role !== 'admin') return res.status(403).json({ error: 'Доступ только для администратора' });
         
         const test = await getTest(req.params.id);
-        if (!test) {
-            return res.status(404).json({ error: 'Тест не найден' });
-        }
-        
+        if (!test) return res.status(404).json({ error: 'Тест не найден' });
         res.json(test);
     } catch (error) {
-        console.error('Ошибка получения теста для редактирования:', error);
+        console.error('Ошибка получения теста:', error);
         res.status(500).json({ error: 'Ошибка сервера' });
     }
 });
@@ -750,11 +825,7 @@ app.get('/admin', (req, res) => {
 app.get('/api/test', (req, res) => {
     res.json({ 
         status: 'ok', 
-        firebase: firebaseInitialized ? 'connected' : 'not connected',
-        env: {
-            projectId: process.env.FIREBASE_PROJECT_ID || 'not set',
-            clientEmail: process.env.FIREBASE_CLIENT_EMAIL || 'not set'
-        }
+        firebase: firebaseInitialized ? 'connected' : 'not connected'
     });
 });
 
@@ -829,7 +900,7 @@ async function startServer() {
             questions: testQuestions,
             createdBy: 'admin'
         });
-        console.log('✅ Тестовый тест создан с подсказками');
+        console.log('✅ Тестовый тест создан');
     }
     
     if (process.env.NODE_ENV !== 'production') {
@@ -840,9 +911,7 @@ async function startServer() {
             console.log('   📋 Пользователь: user / user123');
             console.log(`\n🌐 Откройте http://localhost:${PORT}`);
             if (!firebaseInitialized) {
-                console.log('\n⚠️ ВНИМАНИЕ: Данные хранятся в памяти!');
-                console.log('   При перезапуске сервера данные будут потеряны.');
-                console.log('   Для сохранения данных подключите Firebase.');
+                console.log('\n⚠️ Данные хранятся в памяти!');
             } else {
                 console.log('✅ Данные сохраняются в Firebase');
             }

@@ -23,6 +23,7 @@
                     <button class="tab-btn active" data-tab="tests">📝 Тесты</button>
                     <button class="tab-btn" data-tab="create">➕ Создать тест</button>
                     <button class="tab-btn" data-tab="stats">📊 Статистика</button>
+                    <button class="tab-btn" data-tab="calls">📞 Звонки</button>
                 </div>
             </header>
 
@@ -73,6 +74,45 @@
             <div id="tab-stats" class="tab-content">
                 <h2>📊 Статистика платформы</h2>
                 <div id="statsContent"></div>
+            </div>
+
+            <div id="tab-calls" class="tab-content">
+                <h2>📞 Аудиозвонки</h2>
+                
+                <div id="callsListView">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <h3 style="margin: 0; color: #2d3748;">Доступные комнаты</h3>
+                        <button id="createRoomBtn" class="btn-primary">+ Создать комнату</button>
+                    </div>
+                    <div id="roomsContainer"></div>
+                </div>
+
+                <div id="callRoomView" style="display: none;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <div>
+                            <h3 id="callRoomName" style="margin: 0; color: #2d3748;"></h3>
+                            <small id="callRoomStatus" style="color: #718096;"></small>
+                        </div>
+                        <button id="leaveRoomBtn" class="btn-small btn-danger">📵 Выйти из комнаты</button>
+                    </div>
+
+                    <div style="text-align: center; padding: 30px; background: #f7fafc; border-radius: 15px; margin: 20px 0;">
+                        <div id="micIcon" style="font-size: 80px; margin-bottom: 20px;">🎤</div>
+                        <div id="callStatus" style="font-size: 18px; color: #4a5568; margin-bottom: 20px;">Ожидание собеседника...</div>
+                        
+                        <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+                            <button id="toggleMicBtn" class="btn-primary" disabled>🔇 Выключить микрофон</button>
+                            <button id="testMicBtn" class="btn-secondary">🎤 Проверить микрофон</button>
+                        </div>
+                    </div>
+
+                    <div style="padding: 15px; background: #ebf4ff; border-radius: 10px;">
+                        <h4 style="margin: 0 0 10px 0; color: #2b6cb0;">👥 Участники</h4>
+                        <div id="participantsList"></div>
+                    </div>
+
+                    <div id="remoteAudios"></div>
+                </div>
             </div>
         </div>
     </div>

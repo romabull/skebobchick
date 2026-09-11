@@ -14,6 +14,15 @@ let timeLeft = 0;
 let totalTimeSpent = 0;
 let testStartTime = 0;
 
+// Звонки
+let localStream = null;
+let peerConnections = {};
+let currentRoom = null;
+let signalPollingInterval = null;
+let lastSignalTime = 0;
+let micEnabled = true;
+let isCallActive = false;
+
 // DOM элементы
 const authPage = document.getElementById('authPage');
 const mainPage = document.getElementById('mainPage');
@@ -54,6 +63,20 @@ const hintContainer = document.getElementById('hintContainer');
 const hintText = document.getElementById('hintText');
 let hintUsed = false;
 
+// Звонки DOM
+const createRoomBtn = document.getElementById('createRoomBtn');
+const roomsContainer = document.getElementById('roomsContainer');
+const callsListView = document.getElementById('callsListView');
+const callRoomView = document.getElementById('callRoomView');
+const callRoomName = document.getElementById('callRoomName');
+const callRoomStatus = document.getElementById('callRoomStatus');
+const leaveRoomBtn = document.getElementById('leaveRoomBtn');
+const toggleMicBtn = document.getElementById('toggleMicBtn');
+const testMicBtn = document.getElementById('testMicBtn');
+const micIcon = document.getElementById('micIcon');
+const participantsList = document.getElementById('participantsList');
+const remoteAudios = document.getElementById('remoteAudios');
+
 // ============ 🎨 ФОН С КВАДРАТИКАМИ ============
 function createSquares() {
     const container = document.getElementById('background-squares');
@@ -80,12 +103,10 @@ function createSquares() {
     
     function updateSquares() {
         const radius = 200;
-        
         squares.forEach((square) => {
             const rect = square.getBoundingClientRect();
             const centerX = rect.left + rect.width / 2;
             const centerY = rect.top + rect.height / 2;
-            
             const dx = mouseX - centerX;
             const dy = mouseY - centerY;
             const distance = Math.sqrt(dx * dx + dy * dy);
@@ -103,7 +124,6 @@ function createSquares() {
                 square.style.boxShadow = 'none';
             }
         });
-        
         animationId = requestAnimationFrame(updateSquares);
     }
     
@@ -187,7 +207,6 @@ function showTestPage(test) {
     currentTestId = test.id;
     currentQuestionIndex = 0;
     
-    // Восстанавливаем прогресс, если есть
     const saved = loadProgress(test.id);
     if (saved) {
         userAnswers = saved.answers || {};
@@ -199,7 +218,6 @@ function showTestPage(test) {
     
     testTitle.textContent = test.title;
     
-    // Запускаем таймер
     if (test.timeLimit && test.timeLimit > 0) {
         startTimer(test.timeLimit);
     } else {
@@ -222,6 +240,7 @@ function showResultsPage() {
 function startTimer(minutes) {
     timeLeft = minutes * 60;
     testStartTime = Date.now();
+    totalTimeSpent = 0;
     timerDisplay.style.display = 'block';
     updateTimerDisplay();
     
@@ -245,7 +264,6 @@ function updateTimerDisplay() {
     const seconds = timeLeft % 60;
     timerValue.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
     
-    // Меняем цвет, когда время заканчивается
     if (timeLeft <= 30) {
         timerDisplay.style.background = '#fc8181';
         timerDisplay.style.color = 'white';
@@ -284,7 +302,6 @@ function loadProgress(testId) {
         const saved = localStorage.getItem(`test_progress_${testId}`);
         if (saved) {
             const progress = JSON.parse(saved);
-            // Проверяем, что прогресс не старше 24 часов
             if (Date.now() - progress.savedAt < 24 * 60 * 60 * 1000) {
                 return progress;
             } else {
@@ -355,7 +372,7 @@ function renderTests() {
                             • ${test.class || '7-8'} класс • ${test.questions?.length || 0} вопросов
                             ${test.timeLimit ? ` • ⏱️ ${test.timeLimit} мин` : ''}
                             ${test.createdBy ? ` • Создал: ${test.createdBy}` : ''}
-                            ${hasProgress ? ' • 💾 Есть сохранённый прогресс' : ''}
+                            ${hasProgress ? ' • 💾 Есть прогресс' : ''}
                         </div>
                     </div>
                     <div class="actions">
@@ -415,12 +432,8 @@ async function startTest(testId) {
 
 async function deleteTest(testId) {
     if (!confirm('Удалить этот тест?')) return;
-    
     try {
-        const response = await fetch(`/api/tests/${testId}`, {
-            method: 'DELETE'
-        });
-        
+        const response = await fetch(`/api/tests/${testId}`, { method: 'DELETE' });
         if (response.ok) {
             alert('Тест удалён!');
             loadTests();
@@ -436,10 +449,9 @@ async function deleteTest(testId) {
 
 async function editTest(testId) {
     if (isEditFormOpen) {
-        alert('⚠️ Сначала закройте текущий редактор теста!');
+        alert('⚠️ Сначала закройте текущий редактор!');
         return;
     }
-    
     try {
         const response = await fetch(`/api/admin/tests/${testId}/edit`);
         if (response.ok) {
@@ -449,8 +461,6 @@ async function editTest(testId) {
                 showEditForm(test, testCard);
                 isEditFormOpen = true;
             }
-        } else {
-            alert('Ошибка загрузки теста');
         }
     } catch (error) {
         alert('Ошибка загрузки теста');
@@ -490,7 +500,7 @@ function showEditForm(test, testCard) {
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>⏱️ Ограничение времени (минут, 0 = без ограничения)</label>
+                    <label>⏱️ Время (мин, 0 = без ограничения)</label>
                     <input type="number" id="editTestTimeLimit" min="0" max="180" value="${test.timeLimit || 0}">
                 </div>
                 <div id="editQuestionsEditor">
@@ -510,9 +520,7 @@ function showEditForm(test, testCard) {
     
     const editQuestionsList = document.getElementById('editQuestionsList');
     if (test.questions && test.questions.length > 0) {
-        test.questions.forEach((q, index) => {
-            addEditQuestion(q, index + 1);
-        });
+        test.questions.forEach((q, index) => addEditQuestion(q, index + 1));
     }
     
     document.getElementById('addEditQuestionBtn')?.addEventListener('click', function() {
@@ -555,15 +563,15 @@ function addEditQuestion(questionData, number) {
     const isInput = type === 'input';
     
     const html = `
-        <div class="question-editor" data-type="${type}" style="background: white; border-radius: 10px; padding: 15px; margin-bottom: 15px; border: 1px solid #e2e8f0; position: relative;">
+        <div class="question-editor" style="background: white; border-radius: 10px; padding: 15px; margin-bottom: 15px; border: 1px solid #e2e8f0; position: relative;">
             <div class="question-number" style="position: absolute; top: -10px; left: 15px; background: #667eea; color: white; padding: 2px 12px; border-radius: 20px; font-size: 12px; font-weight: 600;">
                 Вопрос ${number}
             </div>
             <div class="form-group" style="margin-top: 10px;">
-                <label>Тип вопроса</label>
+                <label>Тип</label>
                 <select class="edit-q-type" style="width: 100%; padding: 8px; border: 1px solid #e2e8f0; border-radius: 6px;">
-                    <option value="choice" ${!isInput ? 'selected' : ''}>📝 С выбором ответа</option>
-                    <option value="input" ${isInput ? 'selected' : ''}>✍️ С вводом ответа</option>
+                    <option value="choice" ${!isInput ? 'selected' : ''}>📝 С выбором</option>
+                    <option value="input" ${isInput ? 'selected' : ''}>✍️ С вводом</option>
                 </select>
             </div>
             <div class="form-group">
@@ -577,30 +585,28 @@ function addEditQuestion(questionData, number) {
                     <input type="text" class="edit-option-input" placeholder="Вариант D" value="${q.options?.[3] || ''}">
                 </div>
                 <div class="form-group">
-                    <label>Правильный ответ (0-3)</label>
+                    <label>Правильный (0-3)</label>
                     <input type="number" class="edit-correct-option" min="0" max="3" value="${q.correct || 0}">
                 </div>
             </div>
             <div class="edit-input-block" style="display: ${isInput ? 'block' : 'none'};">
                 <div class="form-group">
-                    <label>✍️ Правильный текстовый ответ</label>
+                    <label>✍️ Правильный ответ</label>
                     <input type="text" class="edit-correct-text" placeholder="Например: 12 или м/с" value="${q.correctText || ''}">
-                    <small style="color: #718096; font-size: 12px;">Регистр не важен. Пробелы в начале/конце игнорируются.</small>
                 </div>
             </div>
             <div class="form-group">
-                <label>Подсказка (необязательно)</label>
-                <input type="text" class="edit-hint-input" placeholder="Введите подсказку" value="${q.hint || ''}">
+                <label>Подсказка</label>
+                <input type="text" class="edit-hint-input" placeholder="Подсказка" value="${q.hint || ''}">
             </div>
-            <button type="button" class="remove-question" onclick="this.parentElement.remove()" style="margin-top: 10px; background: #fc8181; color: white; border: none; padding: 5px 15px; border-radius: 6px; cursor: pointer;">
-                ✕ Удалить вопрос
+            <button type="button" class="remove-question" style="margin-top: 10px; background: #fc8181; color: white; border: none; padding: 5px 15px; border-radius: 6px; cursor: pointer;">
+                ✕ Удалить
             </button>
         </div>
     `;
     
     list.insertAdjacentHTML('beforeend', html);
     
-    // Обработчик переключения типа
     const lastEditor = list.lastElementChild;
     const typeSelect = lastEditor.querySelector('.edit-q-type');
     const optionsBlock = lastEditor.querySelector('.edit-options-block');
@@ -625,7 +631,7 @@ async function saveEditedTest(testId) {
     const timeLimit = document.getElementById('editTestTimeLimit').value;
     
     if (!title) {
-        alert('Введите название теста');
+        alert('Введите название');
         return;
     }
     
@@ -670,7 +676,7 @@ async function saveEditedTest(testId) {
             alert('✅ Тест обновлен!');
             closeEditForm();
         } else {
-            alert('Ошибка обновления теста');
+            alert('Ошибка обновления');
         }
     } catch (error) {
         alert('Ошибка сервера');
@@ -688,7 +694,6 @@ function renderQuestion() {
     
     questionCounter.textContent = `Вопрос ${currentQuestionIndex + 1} из ${total}`;
     
-    // Подсказка
     const hasHint = q.hint && q.hint.trim().length > 0;
     hintBtn.style.display = hasHint ? 'inline-block' : 'none';
     hintContainer.style.display = 'none';
@@ -704,7 +709,7 @@ function renderQuestion() {
                            value="${userAnswers[currentQuestionIndex] || ''}"
                            autocomplete="off"
                            style="width: 100%; padding: 15px 20px; font-size: 18px; border: 2px solid #e2e8f0; border-radius: 12px; background: white; transition: all 0.3s;">
-                    <small style="color: #718096; font-size: 13px; display: block; margin-top: 8px;">✍️ Введите ответ и нажмите Enter или кнопку "Далее"</small>
+                    <small style="color: #718096; font-size: 13px; display: block; margin-top: 8px;">✍️ Введите ответ и нажмите Enter</small>
                 </div>
             ` : `
                 <div class="options">
@@ -725,7 +730,6 @@ function renderQuestion() {
     
     questionContainer.innerHTML = html;
     
-    // Обработчик для текстового поля
     if (isInput) {
         const input = document.getElementById('textAnswerInput');
         if (input) {
@@ -742,15 +746,14 @@ function renderQuestion() {
                     saveProgress();
                     if (currentQuestionIndex < currentTest.questions.length - 1) {
                         nextQuestion();
-                    } else {
-                        if (allQuestionsAnswered()) submitTest();
+                    } else if (allQuestionsAnswered()) {
+                        submitTest();
                     }
                 }
             });
         }
     }
     
-    // Обработчик подсказки
     hintBtn.onclick = function() {
         if (hasHint) {
             hintContainer.style.display = 'block';
@@ -868,7 +871,7 @@ function showResults(results) {
             ${timeStr ? `<p style="color: #718096; font-size: 14px;">⏱️ Время: ${timeStr}</p>` : ''}
             <div style="font-size: 0.9em; color: #718096; margin-top: 10px;">
                 ${results.percentage >= 70 ? '✅ Отличный результат!' : 
-                  results.percentage >= 50 ? '📚 Хорошо, но стоит повторить материал' : 
+                  results.percentage >= 50 ? '📚 Хорошо, но стоит повторить' : 
                   '💪 Нужно больше практики!'}
             </div>
         </div>
@@ -877,7 +880,7 @@ function showResults(results) {
     `;
     
     results.results.forEach((r, index) => {
-        const hintHtml = r.hint ? `<div style="font-size: 12px; color: #d69e2e; margin-top: 4px;">💡 Подсказка: ${r.hint}</div>` : '';
+        const hintHtml = r.hint ? `<div style="font-size: 12px; color: #d69e2e; margin-top: 4px;">💡 ${r.hint}</div>` : '';
         const typeIcon = r.type === 'input' ? '✍️' : '📝';
         
         html += `
@@ -928,7 +931,7 @@ function renderMyResults(results) {
                 <div>
                     <h4>${r.testTitle}</h4>
                     <div class="meta">
-                        ${r.correct} из ${r.total} правильных (${r.percentage}%)
+                        ${r.correct} из ${r.total} (${r.percentage}%)
                         ${r.category ? ` • ${r.category}` : ''}
                         • ${new Date(r.completedAt).toLocaleString()}
                     </div>
@@ -985,9 +988,7 @@ function renderLeaderboard(leaderboard) {
                 <div class="rank ${rankClass}">${medal}</div>
                 <div class="info">
                     <div class="name">${item.username}</div>
-                    <div class="details">
-                        Лучший: ${item.bestTest} • Тестов: ${item.totalTests}
-                    </div>
+                    <div class="details">Лучший: ${item.bestTest} • Тестов: ${item.totalTests}</div>
                 </div>
                 <div class="score ${scoreClass}">${item.bestScore}%</div>
             </div>
@@ -1053,8 +1054,6 @@ createForm.addEventListener('submit', async (e) => {
             loadTests();
             if (currentRole === 'admin') loadStats();
             switchTab('tests');
-        } else {
-            alert('Ошибка создания теста');
         }
     } catch (error) {
         alert('Ошибка сервера');
@@ -1067,10 +1066,10 @@ addQuestionBtn.addEventListener('click', () => {
         <div class="question-editor">
             <div class="question-number">Вопрос ${questionCounterAdmin}</div>
             <div class="form-group">
-                <label>Тип вопроса</label>
+                <label>Тип</label>
                 <select class="q-type" style="width: 100%; padding: 8px; border: 1px solid #e2e8f0; border-radius: 6px;">
-                    <option value="choice">📝 С выбором ответа</option>
-                    <option value="input">✍️ С вводом ответа</option>
+                    <option value="choice">📝 С выбором</option>
+                    <option value="input">✍️ С вводом</option>
                 </select>
             </div>
             <div class="form-group">
@@ -1084,19 +1083,19 @@ addQuestionBtn.addEventListener('click', () => {
                     <input type="text" class="option-input" placeholder="Вариант D">
                 </div>
                 <div class="form-group">
-                    <label>Правильный ответ (0-3)</label>
+                    <label>Правильный (0-3)</label>
                     <input type="number" class="correct-option" min="0" max="3" value="0">
                 </div>
             </div>
             <div class="input-block" style="display: none;">
                 <div class="form-group">
-                    <label>✍️ Правильный текстовый ответ</label>
+                    <label>✍️ Правильный ответ</label>
                     <input type="text" class="correct-text" placeholder="Например: 12 или м/с">
                 </div>
             </div>
             <div class="form-group">
-                <label>Подсказка (необязательно)</label>
-                <input type="text" class="hint-input" placeholder="Введите подсказку">
+                <label>Подсказка</label>
+                <input type="text" class="hint-input" placeholder="Подсказка">
             </div>
             <button type="button" class="remove-question" onclick="this.parentElement.remove()">✕ Удалить</button>
         </div>
@@ -1188,6 +1187,7 @@ function switchTab(tab) {
     if (tab === 'myresults') loadMyResults();
     if (tab === 'tests') loadTests();
     if (tab === 'leaderboard') loadLeaderboard();
+    if (tab === 'calls') loadRooms();
 }
 
 // ============ АУТЕНТИФИКАЦИЯ ============
@@ -1270,6 +1270,7 @@ async function register() {
 
 async function logout() {
     try {
+        if (currentRoom) leaveRoom();
         await fetch('/api/logout', { method: 'POST' });
         currentUser = null;
         currentRole = null;
@@ -1277,6 +1278,374 @@ async function logout() {
     } catch (error) {
         alert('Ошибка выхода');
     }
+}
+
+// ============ 📞 АУДИОЗВОНКИ (WebRTC) ============
+
+const ICE_SERVERS = {
+    iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' }
+    ]
+};
+
+async function loadRooms() {
+    try {
+        const response = await fetch('/api/calls/rooms');
+        if (response.ok) {
+            const rooms = await response.json();
+            renderRooms(rooms);
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки комнат:', error);
+    }
+}
+
+function renderRooms(rooms) {
+    if (!roomsContainer) return;
+    
+    if (!rooms || rooms.length === 0) {
+        roomsContainer.innerHTML = `
+            <div style="text-align: center; padding: 40px; color: #718096;">
+                <p>📭 Нет активных комнат</p>
+                <p style="font-size: 14px;">Создайте комнату, чтобы начать звонок</p>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = '';
+    rooms.forEach(room => {
+        const canDelete = room.createdBy === currentUser || currentRole === 'admin';
+        html += `
+            <div class="test-card" style="cursor: default;">
+                <div class="test-card-header">
+                    <div>
+                        <h3>📞 ${room.name}</h3>
+                        <div class="meta">
+                            Создал: ${room.createdBy} • 
+                            ${new Date(room.createdAt).toLocaleString()}
+                        </div>
+                    </div>
+                    <div class="actions">
+                        <button class="btn-primary btn-join" data-room-id="${room.id}" data-room-name="${room.name}">
+                            🎧 Войти
+                        </button>
+                        ${canDelete ? `
+                            <button class="btn-small btn-danger btn-delete-room" data-room-id="${room.id}">
+                                🗑️
+                            </button>
+                        ` : ''}
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    roomsContainer.innerHTML = html;
+    
+    roomsContainer.querySelectorAll('.btn-join').forEach(btn => {
+        btn.addEventListener('click', function() {
+            joinRoom(this.dataset.roomId, this.dataset.roomName);
+        });
+    });
+    
+    roomsContainer.querySelectorAll('.btn-delete-room').forEach(btn => {
+        btn.addEventListener('click', async function() {
+            if (!confirm('Удалить комнату?')) return;
+            try {
+                const response = await fetch(`/api/calls/rooms/${this.dataset.roomId}`, { method: 'DELETE' });
+                if (response.ok) loadRooms();
+            } catch (error) {
+                alert('Ошибка удаления');
+            }
+        });
+    });
+}
+
+createRoomBtn?.addEventListener('click', async () => {
+    const name = prompt('Название комнаты:', `Звонок ${currentUser}`);
+    if (!name) return;
+    
+    try {
+        const response = await fetch('/api/calls/rooms', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name })
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            loadRooms();
+            setTimeout(() => joinRoom(data.room.id, data.room.name), 500);
+        }
+    } catch (error) {
+        alert('Ошибка создания комнаты');
+    }
+});
+
+async function joinRoom(roomId, roomName) {
+    try {
+        localStream = await navigator.mediaDevices.getUserMedia({ 
+            audio: true, 
+            video: false 
+        });
+        
+        currentRoom = { id: roomId, name: roomName };
+        isCallActive = true;
+        micEnabled = true;
+        lastSignalTime = 0;
+        peerConnections = {};
+        
+        callsListView.style.display = 'none';
+        callRoomView.style.display = 'block';
+        callRoomName.textContent = `📞 ${roomName}`;
+        callRoomStatus.textContent = 'Ожидание собеседника...';
+        micIcon.textContent = '🎤';
+        toggleMicBtn.disabled = false;
+        toggleMicBtn.textContent = '🔇 Выключить микрофон';
+        
+        updateParticipants();
+        await sendSignal('join', { username: currentUser });
+        startSignalPolling();
+        
+        console.log('✅ Вошли в комнату:', roomName);
+    } catch (error) {
+        console.error('Ошибка входа:', error);
+        alert('Не удалось получить доступ к микрофону. Разрешите доступ в браузере.');
+    }
+}
+
+function leaveRoom() {
+    isCallActive = false;
+    
+    if (signalPollingInterval) {
+        clearInterval(signalPollingInterval);
+        signalPollingInterval = null;
+    }
+    
+    Object.values(peerConnections).forEach(pc => {
+        try { pc.close(); } catch (e) {}
+    });
+    peerConnections = {};
+    
+    if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+        localStream = null;
+    }
+    
+    if (currentRoom) {
+        sendSignal('leave', { username: currentUser }).catch(() => {});
+    }
+    
+    currentRoom = null;
+    if (callRoomView) callRoomView.style.display = 'none';
+    if (callsListView) callsListView.style.display = 'block';
+    if (remoteAudios) remoteAudios.innerHTML = '';
+    if (participantsList) participantsList.innerHTML = '';
+    
+    loadRooms();
+    console.log('📵 Вышли из комнаты');
+}
+
+leaveRoomBtn?.addEventListener('click', () => {
+    if (confirm('Выйти из комнаты?')) leaveRoom();
+});
+
+toggleMicBtn?.addEventListener('click', () => {
+    if (!localStream) return;
+    const audioTrack = localStream.getAudioTracks()[0];
+    if (audioTrack) {
+        micEnabled = !micEnabled;
+        audioTrack.enabled = micEnabled;
+        micIcon.textContent = micEnabled ? '🎤' : '🔇';
+        toggleMicBtn.textContent = micEnabled ? '🔇 Выключить микрофон' : '🎤 Включить микрофон';
+    }
+});
+
+testMicBtn?.addEventListener('click', () => {
+    if (!localStream) {
+        alert('Сначала войдите в комнату');
+        return;
+    }
+    
+    const audioContext = new AudioContext();
+    const source = audioContext.createMediaStreamSource(localStream);
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
+    source.connect(analyser);
+    
+    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+    let testCount = 0;
+    
+    const testInterval = setInterval(() => {
+        analyser.getByteFrequencyData(dataArray);
+        const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+        micIcon.textContent = avg > 20 ? '🔊' : (micEnabled ? '🎤' : '🔇');
+        
+        testCount++;
+        if (testCount > 50) {
+            clearInterval(testInterval);
+            audioContext.close();
+            micIcon.textContent = micEnabled ? '🎤' : '🔇';
+        }
+    }, 100);
+    
+    alert('Говорите что-нибудь — иконка должна реагировать');
+});
+
+function createPeerConnection(peerUsername) {
+    if (peerConnections[peerUsername]) return peerConnections[peerUsername];
+    
+    const pc = new RTCPeerConnection(ICE_SERVERS);
+    peerConnections[peerUsername] = pc;
+    
+    if (localStream) {
+        localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+    }
+    
+    pc.ontrack = (event) => {
+        console.log(`🔊 Получен трек от ${peerUsername}`);
+        let audioEl = document.getElementById(`audio-${peerUsername}`);
+        if (!audioEl) {
+            audioEl = document.createElement('audio');
+            audioEl.id = `audio-${peerUsername}`;
+            audioEl.autoplay = true;
+            audioEl.playsInline = true;
+            remoteAudios.appendChild(audioEl);
+        }
+        audioEl.srcObject = event.streams[0];
+        callRoomStatus.textContent = `🔊 Говорите с ${peerUsername}`;
+    };
+    
+    pc.onicecandidate = (event) => {
+        if (event.candidate) {
+            sendSignal('candidate', { candidate: event.candidate, to: peerUsername });
+        }
+    };
+    
+    pc.onconnectionstatechange = () => {
+        console.log(`Соединение с ${peerUsername}: ${pc.connectionState}`);
+        if (pc.connectionState === 'connected') {
+            callRoomStatus.textContent = `✅ Соединено с ${peerUsername}`;
+        } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+            callRoomStatus.textContent = `❌ Соединение потеряно`;
+        }
+    };
+    
+    return pc;
+}
+
+async function sendSignal(type, data) {
+    if (!currentRoom) return;
+    try {
+        await fetch('/api/calls/signal', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ roomId: currentRoom.id, type, data })
+        });
+    } catch (error) {
+        console.error('Ошибка отправки сигнала:', error);
+    }
+}
+
+function startSignalPolling() {
+    if (signalPollingInterval) clearInterval(signalPollingInterval);
+    
+    signalPollingInterval = setInterval(async () => {
+        if (!currentRoom || !isCallActive) return;
+        
+        try {
+            const response = await fetch(`/api/calls/signal/${currentRoom.id}?lastTime=${lastSignalTime}`);
+            if (response.ok) {
+                const signals = await response.json();
+                for (const signal of signals) {
+                    await handleSignal(signal);
+                    lastSignalTime = Math.max(lastSignalTime, new Date(signal.createdAt).getTime());
+                }
+            }
+        } catch (error) {
+            console.error('Ошибка polling:', error);
+        }
+    }, 1000);
+}
+
+async function handleSignal(signal) {
+    const data = JSON.parse(signal.data);
+    const from = signal.from;
+    
+    console.log(`📨 Сигнал от ${from}: ${signal.type}`);
+    
+    try {
+        switch (signal.type) {
+            case 'join': await handleJoin(from); break;
+            case 'offer': await handleOffer(from, data); break;
+            case 'answer': await handleAnswer(from, data); break;
+            case 'candidate': await handleCandidate(from, data); break;
+            case 'leave': handleLeave(from); break;
+        }
+    } catch (error) {
+        console.error('Ошибка обработки сигнала:', error);
+    }
+}
+
+async function handleJoin(peerUsername) {
+    console.log(`👋 ${peerUsername} вошёл`);
+    const pc = createPeerConnection(peerUsername);
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    await sendSignal('offer', { offer: pc.localDescription, to: peerUsername });
+    updateParticipants();
+    callRoomStatus.textContent = `🔗 Подключение к ${peerUsername}...`;
+}
+
+async function handleOffer(from, data) {
+    console.log(`📥 Offer от ${from}`);
+    const pc = createPeerConnection(from);
+    await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    await sendSignal('answer', { answer: pc.localDescription, to: from });
+    updateParticipants();
+}
+
+async function handleAnswer(from, data) {
+    const pc = peerConnections[from];
+    if (!pc) return;
+    await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+}
+
+async function handleCandidate(from, data) {
+    const pc = peerConnections[from];
+    if (!pc) return;
+    try {
+        await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+    } catch (error) {
+        console.error('Ошибка ICE:', error);
+    }
+}
+
+function handleLeave(peerUsername) {
+    console.log(`👋 ${peerUsername} вышел`);
+    if (peerConnections[peerUsername]) {
+        try { peerConnections[peerUsername].close(); } catch (e) {}
+        delete peerConnections[peerUsername];
+    }
+    const audioEl = document.getElementById(`audio-${peerUsername}`);
+    if (audioEl) audioEl.remove();
+    updateParticipants();
+    if (Object.keys(peerConnections).length === 0) {
+        callRoomStatus.textContent = 'Ожидание собеседника...';
+    }
+}
+
+function updateParticipants() {
+    if (!participantsList) return;
+    const participants = [currentUser, ...Object.keys(peerConnections)];
+    participantsList.innerHTML = participants.map(p => 
+        `<div style="padding: 5px 0; color: #2b6cb0;">${p === currentUser ? '👤 (вы)' : '🎧'} ${p}</div>`
+    ).join('');
 }
 
 // ============ СОБЫТИЯ ============
@@ -1298,14 +1667,14 @@ backToTestsBtn.addEventListener('click', () => {
     loadTests();
 });
 
-if (categoryFilter) {
-    categoryFilter.addEventListener('change', renderTests);
-}
+if (categoryFilter) categoryFilter.addEventListener('change', renderTests);
 
 document.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && authPage.style.display !== 'none') {
-        login();
-    }
+    if (e.key === 'Enter' && authPage.style.display !== 'none') login();
+});
+
+window.addEventListener('beforeunload', () => {
+    if (currentRoom) leaveRoom();
 });
 
 // ============ ЗАПУСК ============

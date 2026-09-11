@@ -1062,3 +1062,86 @@ header {
     font-weight: 600;
     margin-left: 8px;
 }
+/* ============ ТАЙМЕР ============ */
+#timerDisplay {
+    transition: all 0.3s;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+}
+
+/* ============ ВВОД ОТВЕТА ============ */
+.text-answer-input {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.text-answer-input:focus {
+    outline: none;
+    border-color: #667eea !important;
+    box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.15);
+}
+
+.input-answer-block {
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* ============ КАТЕГОРИИ ============ */
+#categoryFilter {
+    background: white;
+    transition: all 0.3s;
+}
+
+#categoryFilter:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+/* ============ РЕДАКТОР ВОПРОСОВ ============ */
+.q-type {
+    background: #f7fafc;
+    cursor: pointer;
+}
+
+.options-block, .input-block {
+    transition: all 0.3s;
+}
+
+/* ============ ЗВОНКИ ============ */
+#micIcon {
+    transition: all 0.3s;
+    animation: micPulse 2s infinite;
+}
+
+@keyframes micPulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+}
+
+#callRoomView audio {
+    display: none;
+}
+
+.btn-join {
+    background: #48bb78;
+}
+
+.btn-join:hover {
+    background: #38a169;
+}
+
+#participantsList div {
+    font-size: 15px;
+    padding: 8px 12px;
+    background: white;
+    border-radius: 8px;
+    margin-bottom: 5px;
+}

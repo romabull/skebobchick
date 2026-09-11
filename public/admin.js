@@ -3,6 +3,15 @@ let tests = [];
 let questionCounter = 0;
 let isEditFormOpen = false;
 
+// Звонки
+let localStream = null;
+let peerConnections = {};
+let currentRoom = null;
+let signalPollingInterval = null;
+let lastSignalTime = 0;
+let micEnabled = true;
+let isCallActive = false;
+
 const adminPanel = document.getElementById('adminPanel');
 const adminUserEl = document.getElementById('adminUser');
 const logoutBtn = document.getElementById('logoutBtn');
@@ -11,6 +20,28 @@ const createForm = document.getElementById('createTestForm');
 const addQuestionBtn = document.getElementById('addQuestionBtn');
 const questionsList = document.getElementById('questionsList');
 const statsContent = document.getElementById('statsContent');
+
+// Звонки DOM
+const createRoomBtn = document.getElementById('createRoomBtn');
+const roomsContainer = document.getElementById('roomsContainer');
+const callsListView = document.getElementById('callsListView');
+const callRoomView = document.getElementById('callRoomView');
+const callRoomName = document.getElementById('callRoomName');
+const callRoomStatus = document.getElementById('callRoomStatus');
+const leaveRoomBtn = document.getElementById('leaveRoomBtn');
+const toggleMicBtn = document.getElementById('toggleMicBtn');
+const testMicBtn = document.getElementById('testMicBtn');
+const micIcon = document.getElementById('micIcon');
+const participantsList = document.getElementById('participantsList');
+const remoteAudios = document.getElementById('remoteAudios');
+
+const ICE_SERVERS = {
+    iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' }
+    ]
+};
 
 async function checkAdminAccess() {
     try {
@@ -59,7 +90,6 @@ function renderTests() {
                     📚 ${test.category || 'Другое'} • 
                     ${test.questions?.length || 0} вопросов
                     ${test.timeLimit ? ` • ⏱️ ${test.timeLimit} мин` : ''}
-                    ${test.updatedAt ? ` • Обновлен: ${new Date(test.updatedAt).toLocaleDateString()}` : ''}
                 </small>
             </div>
             <div class="actions">
@@ -70,26 +100,18 @@ function renderTests() {
     `).join('');
 
     testsList.querySelectorAll('.btn-edit').forEach(btn => {
-        btn.addEventListener('click', function() {
-            editTest(this.dataset.testId);
-        });
+        btn.addEventListener('click', function() { editTest(this.dataset.testId); });
     });
 
     testsList.querySelectorAll('.btn-delete').forEach(btn => {
-        btn.addEventListener('click', function() {
-            deleteTest(this.dataset.testId);
-        });
+        btn.addEventListener('click', function() { deleteTest(this.dataset.testId); });
     });
 }
 
 async function deleteTest(testId) {
     if (!confirm('Удалить этот тест?')) return;
-    
     try {
-        const response = await fetch(`/api/tests/${testId}`, {
-            method: 'DELETE'
-        });
-        
+        const response = await fetch(`/api/tests/${testId}`, { method: 'DELETE' });
         if (response.ok) {
             loadTests();
             loadStats();
@@ -104,7 +126,6 @@ async function editTest(testId) {
         alert('⚠️ Сначала закройте текущий редактор!');
         return;
     }
-    
     try {
         const response = await fetch(`/api/admin/tests/${testId}/edit`);
         if (response.ok) {
@@ -153,7 +174,7 @@ function showEditForm(test, testItem) {
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>⏱️ Время (мин, 0 = без ограничения)</label>
+                    <label>⏱️ Время (мин)</label>
                     <input type="number" id="editTestTimeLimit" min="0" max="180" value="${test.timeLimit || 0}">
                 </div>
                 <div id="editQuestionsEditor">
@@ -204,12 +225,8 @@ function addEditQuestion(questionData, number) {
     if (!list) return;
     
     const q = questionData || {
-        type: 'choice',
-        question: '',
-        options: ['', '', '', ''],
-        correct: 0,
-        correctText: '',
-        hint: ''
+        type: 'choice', question: '', options: ['', '', '', ''],
+        correct: 0, correctText: '', hint: ''
     };
     
     const type = q.type || 'choice';
@@ -273,10 +290,6 @@ function addEditQuestion(questionData, number) {
             optionsBlock.style.display = 'block';
             inputBlock.style.display = 'none';
         }
-    });
-    
-    lastEditor.querySelector('.remove-question').addEventListener('click', function() {
-        this.parentElement.remove();
     });
 }
 
@@ -511,8 +524,7 @@ function renderStats(stats) {
 
 document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-        const tab = btn.dataset.tab;
-        switchTab(tab);
+        switchTab(btn.dataset.tab);
     });
 });
 
@@ -524,15 +536,369 @@ function switchTab(tab) {
     document.getElementById(`tab-${tab}`).classList.add('active');
     
     if (tab === 'stats') loadStats();
+    if (tab === 'calls') loadRooms();
+}
+
+// ============ ЗВОНКИ ============
+
+async function loadRooms() {
+    try {
+        const response = await fetch('/api/calls/rooms');
+        if (response.ok) {
+            const rooms = await response.json();
+            renderRooms(rooms);
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки комнат:', error);
+    }
+}
+
+function renderRooms(rooms) {
+    if (!roomsContainer) return;
+    
+    if (!rooms || rooms.length === 0) {
+        roomsContainer.innerHTML = `
+            <div style="text-align: center; padding: 40px; color: #718096;">
+                <p>📭 Нет активных комнат</p>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = '';
+    rooms.forEach(room => {
+        const canDelete = room.createdBy === adminUser;
+        html += `
+            <div class="test-card" style="cursor: default;">
+                <div class="test-card-header">
+                    <div>
+                        <h3>📞 ${room.name}</h3>
+                        <div class="meta">
+                            Создал: ${room.createdBy} • 
+                            ${new Date(room.createdAt).toLocaleString()}
+                        </div>
+                    </div>
+                    <div class="actions">
+                        <button class="btn-primary btn-join" data-room-id="${room.id}" data-room-name="${room.name}">
+                            🎧 Войти
+                        </button>
+                        ${canDelete ? `
+                            <button class="btn-small btn-danger btn-delete-room" data-room-id="${room.id}">
+                                🗑️
+                            </button>
+                        ` : ''}
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    roomsContainer.innerHTML = html;
+    
+    roomsContainer.querySelectorAll('.btn-join').forEach(btn => {
+        btn.addEventListener('click', function() {
+            joinRoom(this.dataset.roomId, this.dataset.roomName);
+        });
+    });
+    
+    roomsContainer.querySelectorAll('.btn-delete-room').forEach(btn => {
+        btn.addEventListener('click', async function() {
+            if (!confirm('Удалить комнату?')) return;
+            try {
+                const response = await fetch(`/api/calls/rooms/${this.dataset.roomId}`, { method: 'DELETE' });
+                if (response.ok) loadRooms();
+            } catch (error) {
+                alert('Ошибка удаления');
+            }
+        });
+    });
+}
+
+createRoomBtn?.addEventListener('click', async () => {
+    const name = prompt('Название комнаты:', `Звонок ${adminUser}`);
+    if (!name) return;
+    
+    try {
+        const response = await fetch('/api/calls/rooms', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name })
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            loadRooms();
+            setTimeout(() => joinRoom(data.room.id, data.room.name), 500);
+        }
+    } catch (error) {
+        alert('Ошибка создания комнаты');
+    }
+});
+
+async function joinRoom(roomId, roomName) {
+    try {
+        localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        
+        currentRoom = { id: roomId, name: roomName };
+        isCallActive = true;
+        micEnabled = true;
+        lastSignalTime = 0;
+        peerConnections = {};
+        
+        callsListView.style.display = 'none';
+        callRoomView.style.display = 'block';
+        callRoomName.textContent = `📞 ${roomName}`;
+        callRoomStatus.textContent = 'Ожидание собеседника...';
+        micIcon.textContent = '🎤';
+        toggleMicBtn.disabled = false;
+        toggleMicBtn.textContent = '🔇 Выключить микрофон';
+        
+        updateParticipants();
+        await sendSignal('join', { username: adminUser });
+        startSignalPolling();
+        
+        console.log('✅ Вошли в комнату:', roomName);
+    } catch (error) {
+        console.error('Ошибка входа:', error);
+        alert('Не удалось получить доступ к микрофону');
+    }
+}
+
+function leaveRoom() {
+    isCallActive = false;
+    
+    if (signalPollingInterval) {
+        clearInterval(signalPollingInterval);
+        signalPollingInterval = null;
+    }
+    
+    Object.values(peerConnections).forEach(pc => {
+        try { pc.close(); } catch (e) {}
+    });
+    peerConnections = {};
+    
+    if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+        localStream = null;
+    }
+    
+    if (currentRoom) {
+        sendSignal('leave', { username: adminUser }).catch(() => {});
+    }
+    
+    currentRoom = null;
+    if (callRoomView) callRoomView.style.display = 'none';
+    if (callsListView) callsListView.style.display = 'block';
+    if (remoteAudios) remoteAudios.innerHTML = '';
+    if (participantsList) participantsList.innerHTML = '';
+    
+    loadRooms();
+}
+
+leaveRoomBtn?.addEventListener('click', () => {
+    if (confirm('Выйти из комнаты?')) leaveRoom();
+});
+
+toggleMicBtn?.addEventListener('click', () => {
+    if (!localStream) return;
+    const audioTrack = localStream.getAudioTracks()[0];
+    if (audioTrack) {
+        micEnabled = !micEnabled;
+        audioTrack.enabled = micEnabled;
+        micIcon.textContent = micEnabled ? '🎤' : '🔇';
+        toggleMicBtn.textContent = micEnabled ? '🔇 Выключить микрофон' : '🎤 Включить микрофон';
+    }
+});
+
+testMicBtn?.addEventListener('click', () => {
+    if (!localStream) {
+        alert('Сначала войдите в комнату');
+        return;
+    }
+    
+    const audioContext = new AudioContext();
+    const source = audioContext.createMediaStreamSource(localStream);
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
+    source.connect(analyser);
+    
+    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+    let testCount = 0;
+    
+    const testInterval = setInterval(() => {
+        analyser.getByteFrequencyData(dataArray);
+        const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+        micIcon.textContent = avg > 20 ? '🔊' : (micEnabled ? '🎤' : '🔇');
+        
+        testCount++;
+        if (testCount > 50) {
+            clearInterval(testInterval);
+            audioContext.close();
+            micIcon.textContent = micEnabled ? '🎤' : '🔇';
+        }
+    }, 100);
+    
+    alert('Говорите — иконка реагирует');
+});
+
+function createPeerConnection(peerUsername) {
+    if (peerConnections[peerUsername]) return peerConnections[peerUsername];
+    
+    const pc = new RTCPeerConnection(ICE_SERVERS);
+    peerConnections[peerUsername] = pc;
+    
+    if (localStream) {
+        localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+    }
+    
+    pc.ontrack = (event) => {
+        let audioEl = document.getElementById(`audio-${peerUsername}`);
+        if (!audioEl) {
+            audioEl = document.createElement('audio');
+            audioEl.id = `audio-${peerUsername}`;
+            audioEl.autoplay = true;
+            audioEl.playsInline = true;
+            remoteAudios.appendChild(audioEl);
+        }
+        audioEl.srcObject = event.streams[0];
+        callRoomStatus.textContent = `🔊 Говорите с ${peerUsername}`;
+    };
+    
+    pc.onicecandidate = (event) => {
+        if (event.candidate) {
+            sendSignal('candidate', { candidate: event.candidate, to: peerUsername });
+        }
+    };
+    
+    pc.onconnectionstatechange = () => {
+        if (pc.connectionState === 'connected') {
+            callRoomStatus.textContent = `✅ Соединено с ${peerUsername}`;
+        } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+            callRoomStatus.textContent = `❌ Соединение потеряно`;
+        }
+    };
+    
+    return pc;
+}
+
+async function sendSignal(type, data) {
+    if (!currentRoom) return;
+    try {
+        await fetch('/api/calls/signal', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ roomId: currentRoom.id, type, data })
+        });
+    } catch (error) {
+        console.error('Ошибка отправки сигнала:', error);
+    }
+}
+
+function startSignalPolling() {
+    if (signalPollingInterval) clearInterval(signalPollingInterval);
+    
+    signalPollingInterval = setInterval(async () => {
+        if (!currentRoom || !isCallActive) return;
+        
+        try {
+            const response = await fetch(`/api/calls/signal/${currentRoom.id}?lastTime=${lastSignalTime}`);
+            if (response.ok) {
+                const signals = await response.json();
+                for (const signal of signals) {
+                    await handleSignal(signal);
+                    lastSignalTime = Math.max(lastSignalTime, new Date(signal.createdAt).getTime());
+                }
+            }
+        } catch (error) {
+            console.error('Ошибка polling:', error);
+        }
+    }, 1000);
+}
+
+async function handleSignal(signal) {
+    const data = JSON.parse(signal.data);
+    const from = signal.from;
+    
+    try {
+        switch (signal.type) {
+            case 'join': await handleJoin(from); break;
+            case 'offer': await handleOffer(from, data); break;
+            case 'answer': await handleAnswer(from, data); break;
+            case 'candidate': await handleCandidate(from, data); break;
+            case 'leave': handleLeave(from); break;
+        }
+    } catch (error) {
+        console.error('Ошибка обработки сигнала:', error);
+    }
+}
+
+async function handleJoin(peerUsername) {
+    const pc = createPeerConnection(peerUsername);
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    await sendSignal('offer', { offer: pc.localDescription, to: peerUsername });
+    updateParticipants();
+    callRoomStatus.textContent = `🔗 Подключение к ${peerUsername}...`;
+}
+
+async function handleOffer(from, data) {
+    const pc = createPeerConnection(from);
+    await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    await sendSignal('answer', { answer: pc.localDescription, to: from });
+    updateParticipants();
+}
+
+async function handleAnswer(from, data) {
+    const pc = peerConnections[from];
+    if (!pc) return;
+    await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+}
+
+async function handleCandidate(from, data) {
+    const pc = peerConnections[from];
+    if (!pc) return;
+    try {
+        await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+    } catch (error) {
+        console.error('Ошибка ICE:', error);
+    }
+}
+
+function handleLeave(peerUsername) {
+    if (peerConnections[peerUsername]) {
+        try { peerConnections[peerUsername].close(); } catch (e) {}
+        delete peerConnections[peerUsername];
+    }
+    const audioEl = document.getElementById(`audio-${peerUsername}`);
+    if (audioEl) audioEl.remove();
+    updateParticipants();
+    if (Object.keys(peerConnections).length === 0) {
+        callRoomStatus.textContent = 'Ожидание собеседника...';
+    }
+}
+
+function updateParticipants() {
+    if (!participantsList) return;
+    const participants = [adminUser, ...Object.keys(peerConnections)];
+    participantsList.innerHTML = participants.map(p => 
+        `<div style="padding: 5px 0; color: #2b6cb0;">${p === adminUser ? '👤 (вы)' : '🎧'} ${p}</div>`
+    ).join('');
 }
 
 logoutBtn.addEventListener('click', async () => {
     try {
+        if (currentRoom) leaveRoom();
         await fetch('/api/logout', { method: 'POST' });
         window.location.href = '/';
     } catch (error) {
         alert('Ошибка выхода');
     }
+});
+
+window.addEventListener('beforeunload', () => {
+    if (currentRoom) leaveRoom();
 });
 
 checkAdminAccess();
