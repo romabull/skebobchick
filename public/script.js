@@ -1181,14 +1181,47 @@ function renderStats(stats) {
     let categoryHtml = '';
     if (stats.categoryStats && Object.keys(stats.categoryStats).length > 0) {
         categoryHtml = `
-            <h4 style="margin-top: 20px; color: #2d3748;">📚 По категориям:</h4>
+            <h4 style="margin-top: 25px; color: #2d3748;">📚 По категориям:</h4>
             <ul style="list-style: none; padding: 0;">
                 ${Object.entries(stats.categoryStats).map(([cat, data]) => `
-                    <li style="padding: 8px 12px; background: #f7fafc; border-radius: 8px; margin-bottom: 5px;">
+                    <li style="padding: 10px 15px; background: #f7fafc; border-radius: 10px; margin-bottom: 6px; border-left: 4px solid #667eea;">
                         <strong>${cat}</strong> — ${data.tests} тестов, ${data.completions} прохождений
                     </li>
                 `).join('')}
             </ul>
+        `;
+    }
+    
+    // ✅ Список ВСЕХ пользователей с ролями
+    let usersHtml = '';
+    if (stats.users && stats.users.length > 0) {
+        usersHtml = `
+            <h4 style="margin-top: 25px; color: #2d3748;">👥 Пользователи (${stats.users.length}):</h4>
+            <ul style="list-style: none; padding: 0;">
+                ${stats.users.map(u => {
+                    const username = typeof u === 'object' ? u.username : u;
+                    const role = typeof u === 'object' ? (u.role || 'user') : 'user';
+                    const roleIcon = role === 'admin' ? '👑' : '👤';
+                    const roleLabel = role === 'admin' ? 'Администратор' : 'Пользователь';
+                    const roleColor = role === 'admin' ? '#f6ad55' : '#4299e1';
+                    
+                    return `
+                        <li style="padding: 12px 16px; background: #f7fafc; border-radius: 10px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; border-left: 4px solid ${roleColor};">
+                            <span style="font-size: 15px;">${roleIcon} <strong>${username}</strong></span>
+                            <span style="font-size: 12px; color: ${roleColor}; font-weight: 600; background: white; padding: 3px 12px; border-radius: 12px;">
+                                ${roleLabel}
+                            </span>
+                        </li>
+                    `;
+                }).join('')}
+            </ul>
+        `;
+    } else {
+        usersHtml = `
+            <h4 style="margin-top: 25px; color: #2d3748;">👥 Пользователи:</h4>
+            <p style="color: #718096; padding: 15px; background: #f7fafc; border-radius: 10px;">
+                📭 Пользователей пока нет
+            </p>
         `;
     }
     
@@ -1208,9 +1241,9 @@ function renderStats(stats) {
             </div>
         </div>
         ${categoryHtml}
+        ${usersHtml}
     `;
 }
-
 // ============ НАВИГАЦИЯ ============
 
 document.querySelectorAll('.tab-btn').forEach(btn => {
