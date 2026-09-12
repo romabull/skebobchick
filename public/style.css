@@ -1145,3 +1145,746 @@ header {
     border-radius: 8px;
     margin-bottom: 5px;
 }
+/* ============ 📞 КОМНАТА ЗВОНКА (НОВЫЙ ДИЗАЙН) ============ */
+
+#callRoomView {
+    background: #1a1a2e;
+    border-radius: 20px;
+    padding: 0;
+    margin-top: 20px;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    display: flex;
+    flex-direction: column;
+    min-height: 70vh;
+}
+
+/* Заголовок комнаты */
+.call-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 25px;
+    background: rgba(0,0,0,0.3);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.call-header-info h3 {
+    margin: 0;
+    color: white;
+    font-size: 1.3em;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.call-header-info small {
+    color: #a0aec0;
+    font-size: 13px;
+}
+
+.call-header-actions {
+    display: flex;
+    gap: 10px;
+}
+
+/* Основная область с видео */
+.call-stage {
+    flex: 1;
+    position: relative;
+    background: #0f0f1e;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 400px;
+    padding: 20px;
+    overflow: hidden;
+}
+
+/* Видео собеседника (большое) */
+#screenShareContainer {
+    position: absolute;
+    inset: 20px;
+    display: none;
+    flex-direction: column;
+    z-index: 5;
+}
+
+#screenShareContainer.active {
+    display: flex;
+}
+
+#screenShareVideo {
+    flex: 1;
+    width: 100%;
+    background: #000;
+    border-radius: 12px;
+    object-fit: contain;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+}
+
+#screenShareInfo {
+    position: absolute;
+    top: 15px;
+    left: 15px;
+    background: rgba(0,0,0,0.7);
+    color: white;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 13px;
+    backdrop-filter: blur(10px);
+    z-index: 10;
+}
+
+/* Заглушка "ожидание" */
+.call-waiting {
+    text-align: center;
+    color: white;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+}
+
+.call-waiting-avatar {
+    width: 150px;
+    height: 150px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 70px;
+    box-shadow: 0 20px 60px rgba(102, 126, 234, 0.4);
+    animation: pulseAvatar 2s infinite;
+}
+
+@keyframes pulseAvatar {
+    0%, 100% { transform: scale(1); box-shadow: 0 20px 60px rgba(102, 126, 234, 0.4); }
+    50% { transform: scale(1.05); box-shadow: 0 20px 80px rgba(102, 126, 234, 0.6); }
+}
+
+.call-waiting-text {
+    font-size: 20px;
+    font-weight: 600;
+    color: #e2e8f0;
+}
+
+.call-waiting-sub {
+    color: #a0aec0;
+    font-size: 14px;
+}
+
+/* Своё превью (картинка в картинке) */
+#myScreenShare {
+    position: absolute;
+    bottom: 100px;
+    right: 20px;
+    width: 280px;
+    z-index: 20;
+    display: none;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 15px 40px rgba(0,0,0,0.6);
+    border: 2px solid rgba(159, 122, 234, 0.6);
+    background: #000;
+}
+
+#myScreenShare.active {
+    display: block;
+}
+
+#myScreenShare::before {
+    content: '📺 Вы транслируете';
+    display: block;
+    padding: 8px 12px;
+    background: rgba(159, 122, 234, 0.9);
+    color: white;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: center;
+}
+
+#myScreenVideo {
+    width: 100%;
+    display: block;
+    max-height: 200px;
+    object-fit: cover;
+}
+
+/* Панель управления внизу */
+.call-controls {
+    position: relative;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 20px;
+    background: rgba(0,0,0,0.5);
+    backdrop-filter: blur(20px);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 15px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+}
+
+.call-btn {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255,255,255,0.1);
+    color: white;
+    font-size: 24px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s;
+    position: relative;
+}
+
+.call-btn:hover {
+    background: rgba(255,255,255,0.2);
+    transform: scale(1.1);
+}
+
+.call-btn.active {
+    background: #48bb78;
+}
+
+.call-btn.danger {
+    background: #fc8181;
+}
+
+.call-btn.danger:hover {
+    background: #f56565;
+}
+
+.call-btn.primary {
+    background: #9f7aea;
+}
+
+.call-btn.primary:hover {
+    background: #805ad5;
+}
+
+.call-btn.muted {
+    background: #fc8181;
+}
+
+/* Подписи под кнопками */
+.call-btn::after {
+    content: attr(data-label);
+    position: absolute;
+    bottom: -25px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 11px;
+    color: #a0aec0;
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+}
+
+.call-btn:hover::after {
+    opacity: 1;
+}
+
+/* Участники (сбоку) */
+.call-participants {
+    position: absolute;
+    top: 80px;
+    right: 20px;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(20px);
+    border-radius: 12px;
+    padding: 15px;
+    min-width: 200px;
+    max-width: 250px;
+    z-index: 15;
+    border: 1px solid rgba(255,255,255,0.1);
+}
+
+.call-participants h4 {
+    margin: 0 0 10px 0;
+    color: white;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.participant-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 8px;
+    margin-bottom: 5px;
+    color: white;
+    font-size: 14px;
+    transition: all 0.3s;
+}
+
+.participant-item:hover {
+    background: rgba(255,255,255,0.1);
+}
+
+.participant-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
+.participant-item.is-me .participant-avatar {
+    background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+}
+
+.participant-name {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.participant-mic {
+    font-size: 14px;
+    color: #48bb78;
+}
+
+.participant-mic.muted {
+    color: #fc8181;
+}
+
+/* Скрываем старые элементы, если остались */
+#micIcon,
+#callStatus,
+#remoteAudios {
+    display: none !important;
+}
+
+/* Мобильная версия */
+@media (max-width: 768px) {
+    #callRoomView {
+        min-height: 100vh;
+        border-radius: 0;
+        margin: 0;
+    }
+    
+    .call-header {
+        padding: 12px 15px;
+    }
+    
+    .call-header-info h3 {
+        font-size: 1em;
+    }
+    
+    .call-stage {
+        min-height: 300px;
+        padding: 10px;
+    }
+    
+    .call-waiting-avatar {
+        width: 100px;
+        height: 100px;
+        font-size: 50px;
+    }
+    
+    .call-waiting-text {
+        font-size: 16px;
+    }
+    
+    .call-controls {
+        padding: 15px;
+        gap: 10px;
+    }
+    
+    .call-btn {
+        width: 50px;
+        height: 50px;
+        font-size: 20px;
+    }
+    
+    .call-participants {
+        top: 70px;
+        right: 10px;
+        left: 10px;
+        max-width: none;
+    }
+    
+    #myScreenShare {
+        width: 150px;
+        bottom: 90px;
+        right: 10px;
+    }
+    
+    #myScreenVideo {
+        max-height: 100px;
+    }
+}
+/* ============ 📞 ПОЛНОЭКРАННАЯ КОМНАТА ============ */
+
+body.in-call {
+    overflow: hidden;
+}
+
+body.in-call .container {
+    max-width: 100%;
+    padding: 0;
+    border-radius: 0;
+    background: #1a1a2e;
+    box-shadow: none;
+}
+
+body.in-call header {
+    display: none;
+}
+
+body.in-call #background-squares {
+    display: none;
+}
+
+#callRoomView {
+    position: fixed;
+    inset: 0;
+    background: #1a1a2e;
+    display: flex;
+    flex-direction: column;
+    z-index: 1000;
+}
+
+.call-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 25px;
+    background: rgba(0,0,0,0.5);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    flex-shrink: 0;
+}
+
+.call-header-info h3 {
+    margin: 0;
+    color: white;
+    font-size: 1.3em;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.call-header-info small {
+    color: #a0aec0;
+    font-size: 13px;
+}
+
+.call-stage {
+    flex: 1;
+    position: relative;
+    background: #0f0f1e;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+#screenShareContainer {
+    position: absolute;
+    inset: 0;
+    display: none;
+    background: #000;
+    z-index: 5;
+}
+
+#screenShareContainer.active {
+    display: block;
+}
+
+#screenShareVideo {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: #000;
+}
+
+#screenShareInfo {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    background: rgba(0,0,0,0.75);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 25px;
+    font-size: 14px;
+    backdrop-filter: blur(10px);
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.call-waiting {
+    text-align: center;
+    color: white;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    z-index: 1;
+}
+
+.call-waiting-avatar {
+    width: 180px;
+    height: 180px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 90px;
+    box-shadow: 0 20px 60px rgba(102, 126, 234, 0.5);
+    animation: pulseAvatar 2s infinite;
+}
+
+@keyframes pulseAvatar {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+}
+
+.call-waiting-text {
+    font-size: 24px;
+    font-weight: 600;
+    color: #e2e8f0;
+}
+
+.call-waiting-sub {
+    color: #a0aec0;
+    font-size: 15px;
+}
+
+.call-participants {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(20px);
+    border-radius: 15px;
+    padding: 15px;
+    min-width: 220px;
+    max-width: 280px;
+    max-height: calc(100% - 40px);
+    overflow-y: auto;
+    z-index: 15;
+    border: 1px solid rgba(255,255,255,0.1);
+}
+
+.call-participants h4 {
+    margin: 0 0 12px 0;
+    color: white;
+    font-size: 14px;
+    font-weight: 600;
+    opacity: 0.8;
+}
+
+.participant-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 10px;
+    margin-bottom: 6px;
+    color: white;
+    font-size: 14px;
+    transition: all 0.3s;
+    border: 2px solid transparent;
+}
+
+.participant-item.speaking {
+    background: rgba(72, 187, 120, 0.2);
+    border-color: #48bb78;
+    box-shadow: 0 0 20px rgba(72, 187, 120, 0.4);
+}
+
+.participant-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    font-weight: 700;
+    color: white;
+    flex-shrink: 0;
+}
+
+.participant-item.is-me .participant-avatar {
+    background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+}
+
+.participant-name {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 500;
+}
+
+.participant-mic {
+    font-size: 16px;
+    transition: all 0.3s;
+}
+
+.participant-mic.muted {
+    opacity: 0.5;
+}
+
+.participant-speaking {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #48bb78;
+    animation: speakPulse 1s infinite;
+    display: none;
+}
+
+.participant-item.speaking .participant-speaking {
+    display: block;
+}
+
+@keyframes speakPulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.5); opacity: 0.5; }
+}
+
+.call-controls {
+    padding: 20px;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(20px);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 15px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+    flex-shrink: 0;
+    position: relative;
+    z-index: 20;
+}
+
+.call-btn {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255,255,255,0.15);
+    color: white;
+    font-size: 24px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s;
+    position: relative;
+}
+
+.call-btn:hover {
+    background: rgba(255,255,255,0.25);
+    transform: scale(1.1);
+}
+
+.call-btn.active {
+    background: #48bb78;
+}
+
+.call-btn.danger {
+    background: #fc8181;
+}
+
+.call-btn.primary {
+    background: #9f7aea;
+}
+
+.call-btn.muted {
+    background: #fc8181;
+}
+
+.call-btn::after {
+    content: attr(data-label);
+    position: absolute;
+    bottom: -25px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 11px;
+    color: #a0aec0;
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+}
+
+.call-btn:hover::after {
+    opacity: 1;
+}
+
+#micIcon,
+#callStatus,
+#remoteAudios,
+#myScreenShare {
+    display: none !important;
+}
+
+@media (max-width: 768px) {
+    .call-header {
+        padding: 12px 15px;
+    }
+    
+    .call-header-info h3 {
+        font-size: 1em;
+    }
+    
+    .call-waiting-avatar {
+        width: 120px;
+        height: 120px;
+        font-size: 60px;
+    }
+    
+    .call-waiting-text {
+        font-size: 18px;
+    }
+    
+    .call-waiting-sub {
+        font-size: 13px;
+    }
+    
+    .call-participants {
+        top: 10px;
+        right: 10px;
+        left: 10px;
+        min-width: auto;
+        max-width: none;
+        padding: 10px;
+    }
+    
+    .call-controls {
+        padding: 15px;
+        gap: 10px;
+    }
+    
+    .call-btn {
+        width: 50px;
+        height: 50px;
+        font-size: 20px;
+    }
+}

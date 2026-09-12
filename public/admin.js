@@ -6,11 +6,22 @@ let isEditFormOpen = false;
 // Звонки
 let localStream = null;
 let peerConnections = {};
+let pendingCandidates = {};
+let processedSignals = new Set();
+let makingOffer = {};
 let currentRoom = null;
 let signalPollingInterval = null;
 let lastSignalTime = 0;
 let micEnabled = true;
 let isCallActive = false;
+
+// Демонстрация экрана
+let screenStream = null;
+let screenSender = null;
+let isSharingScreen = false;
+
+// Индикатор говорящего
+let audioAnalyzers = {};
 
 const adminPanel = document.getElementById('adminPanel');
 const adminUserEl = document.getElementById('adminUser');
@@ -29,19 +40,38 @@ const callRoomView = document.getElementById('callRoomView');
 const callRoomName = document.getElementById('callRoomName');
 const callRoomStatus = document.getElementById('callRoomStatus');
 const leaveRoomBtn = document.getElementById('leaveRoomBtn');
+const leaveRoomBtnMobile = document.getElementById('leaveRoomBtnMobile');
 const toggleMicBtn = document.getElementById('toggleMicBtn');
 const testMicBtn = document.getElementById('testMicBtn');
-const micIcon = document.getElementById('micIcon');
 const participantsList = document.getElementById('participantsList');
 const remoteAudios = document.getElementById('remoteAudios');
+const callWaiting = document.getElementById('callWaiting');
+
+// Демонстрация экрана DOM
+const shareScreenBtn = document.getElementById('shareScreenBtn');
+const screenShareContainer = document.getElementById('screenShareContainer');
+const screenShareVideo = document.getElementById('screenShareVideo');
+const screenShareInfo = document.getElementById('screenShareInfo');
 
 const ICE_SERVERS = {
     iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun2.l.google.com:19302' }
+        { urls: 'stun:stun2.l.google.com:19302' },
+        {
+            urls: 'turn:openrelay.metered.ca:80',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+        },
+        {
+            urls: 'turn:openrelay.metered.ca:443',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+        }
     ]
 };
+
+// ============ ДОСТУП ============
 
 async function checkAdminAccess() {
     try {
@@ -62,6 +92,8 @@ async function checkAdminAccess() {
         window.location.href = '/';
     }
 }
+
+// ============ ТЕСТЫ ============
 
 async function loadTests() {
     try {
@@ -120,6 +152,8 @@ async function deleteTest(testId) {
         alert('Ошибка удаления');
     }
 }
+
+// ============ РЕДАКТИРОВАНИЕ ============
 
 async function editTest(testId) {
     if (isEditFormOpen) {
@@ -354,6 +388,8 @@ async function saveEditedTest(testId) {
     }
 }
 
+// ============ СОЗДАНИЕ ТЕСТА ============
+
 createForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     
@@ -476,6 +512,8 @@ addQuestionBtn.addEventListener('click', () => {
     });
 });
 
+// ============ СТАТИСТИКА ============
+
 async function loadStats() {
     try {
         const response = await fetch('/api/admin/stats');
@@ -522,6 +560,8 @@ function renderStats(stats) {
     `;
 }
 
+// ============ НАВИГАЦИЯ ============
+
 document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
         switchTab(btn.dataset.tab);
@@ -539,7 +579,55 @@ function switchTab(tab) {
     if (tab === 'calls') loadRooms();
 }
 
-// ============ ЗВОНКИ ============
+// ============ ИНДИКАТОР ГОВОРЯЩЕГО ============
+
+function startSpeakingDetection(username, stream) {
+    if (audioAnalyzers[username]) return;
+    
+    try {
+        const audioContext = new AudioContext();
+        const source = audioContext.createMediaStreamSource(stream);
+        const analyser = audioContext.createAnalyser();
+        analyser.fftSize = 512;
+        analyser.smoothingTimeConstant = 0.8;
+        source.connect(analyser);
+        
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        let silenceCount = 0;
+        
+        const interval = setInterval(() => {
+            analyser.getByteFrequencyData(dataArray);
+            const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+            
+            const participantEl = document.querySelector(`.participant-item[data-username="${username}"]`);
+            if (!participantEl) return;
+            
+            if (avg > 30) {
+                silenceCount = 0;
+                participantEl.classList.add('speaking');
+            } else {
+                silenceCount++;
+                if (silenceCount > 5) {
+                    participantEl.classList.remove('speaking');
+                }
+            }
+        }, 100);
+        
+        audioAnalyzers[username] = { audioContext, analyser, dataArray, interval };
+    } catch (err) {
+        console.warn('Ошибка определения говорящего:', err);
+    }
+}
+
+function stopSpeakingDetection(username) {
+    if (audioAnalyzers[username]) {
+        clearInterval(audioAnalyzers[username].interval);
+        try { audioAnalyzers[username].audioContext.close(); } catch (e) {}
+        delete audioAnalyzers[username];
+    }
+}
+
+// ============ 📞 ЗВОНКИ ============
 
 async function loadRooms() {
     try {
@@ -637,34 +725,74 @@ createRoomBtn?.addEventListener('click', async () => {
 
 async function joinRoom(roomId, roomName) {
     try {
-        localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            alert('Ваш браузер не поддерживает микрофон.');
+            return;
+        }
+        
+        try {
+            localStream = await navigator.mediaDevices.getUserMedia({ 
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                }, 
+                video: false 
+            });
+        } catch (mediaError) {
+            console.error('Ошибка доступа к микрофону:', mediaError);
+            if (mediaError.name === 'NotFoundError') {
+                alert('❌ Микрофон не найден.');
+            } else if (mediaError.name === 'NotAllowedError') {
+                alert('❌ Доступ к микрофону запрещён.');
+            } else if (mediaError.name === 'NotReadableError') {
+                alert('❌ Микрофон занят другой программой.');
+            } else {
+                alert('❌ Ошибка: ' + mediaError.message);
+            }
+            return;
+        }
         
         currentRoom = { id: roomId, name: roomName };
         isCallActive = true;
         micEnabled = true;
         lastSignalTime = 0;
         peerConnections = {};
+        pendingCandidates = {};
+        makingOffer = {};
+        processedSignals.clear();
         
         callsListView.style.display = 'none';
         callRoomView.style.display = 'block';
+        document.body.classList.add('in-call');
+        
         callRoomName.textContent = `📞 ${roomName}`;
         callRoomStatus.textContent = 'Ожидание собеседника...';
-        micIcon.textContent = '🎤';
+        
         toggleMicBtn.disabled = false;
-        toggleMicBtn.textContent = '🔇 Выключить микрофон';
+        toggleMicBtn.textContent = '🎤';
+        toggleMicBtn.classList.add('active');
+        toggleMicBtn.classList.remove('muted');
+        
+        if (callWaiting) callWaiting.style.display = 'flex';
         
         updateParticipants();
+        startSpeakingDetection(adminUser, localStream);
         await sendSignal('join', { username: adminUser });
         startSignalPolling();
         
         console.log('✅ Вошли в комнату:', roomName);
     } catch (error) {
         console.error('Ошибка входа:', error);
-        alert('Не удалось получить доступ к микрофону');
+        alert('Не удалось войти в комнату: ' + error.message);
     }
 }
 
 function leaveRoom() {
+    if (isSharingScreen) {
+        stopScreenShare();
+    }
+    
     isCallActive = false;
     
     if (signalPollingInterval) {
@@ -676,6 +804,11 @@ function leaveRoom() {
         try { pc.close(); } catch (e) {}
     });
     peerConnections = {};
+    pendingCandidates = {};
+    makingOffer = {};
+    processedSignals.clear();
+    
+    Object.keys(audioAnalyzers).forEach(username => stopSpeakingDetection(username));
     
     if (localStream) {
         localStream.getTracks().forEach(track => track.stop());
@@ -691,11 +824,19 @@ function leaveRoom() {
     if (callsListView) callsListView.style.display = 'block';
     if (remoteAudios) remoteAudios.innerHTML = '';
     if (participantsList) participantsList.innerHTML = '';
+    if (screenShareContainer) screenShareContainer.classList.remove('active');
+    
+    document.body.classList.remove('in-call');
     
     loadRooms();
+    console.log('📵 Вышли из комнаты');
 }
 
 leaveRoomBtn?.addEventListener('click', () => {
+    if (confirm('Выйти из комнаты?')) leaveRoom();
+});
+
+leaveRoomBtnMobile?.addEventListener('click', () => {
     if (confirm('Выйти из комнаты?')) leaveRoom();
 });
 
@@ -705,8 +846,12 @@ toggleMicBtn?.addEventListener('click', () => {
     if (audioTrack) {
         micEnabled = !micEnabled;
         audioTrack.enabled = micEnabled;
-        micIcon.textContent = micEnabled ? '🎤' : '🔇';
-        toggleMicBtn.textContent = micEnabled ? '🔇 Выключить микрофон' : '🎤 Включить микрофон';
+        
+        toggleMicBtn.textContent = micEnabled ? '🎤' : '🔇';
+        toggleMicBtn.classList.toggle('active', micEnabled);
+        toggleMicBtn.classList.toggle('muted', !micEnabled);
+        
+        updateParticipants();
     }
 });
 
@@ -728,40 +873,234 @@ testMicBtn?.addEventListener('click', () => {
     const testInterval = setInterval(() => {
         analyser.getByteFrequencyData(dataArray);
         const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
-        micIcon.textContent = avg > 20 ? '🔊' : (micEnabled ? '🎤' : '🔇');
+        
+        if (avg > 20) {
+            testMicBtn.style.transform = `scale(${1 + avg / 200})`;
+            testMicBtn.textContent = '🔊';
+        } else {
+            testMicBtn.style.transform = 'scale(1)';
+            testMicBtn.textContent = '🎧';
+        }
         
         testCount++;
         if (testCount > 50) {
             clearInterval(testInterval);
             audioContext.close();
-            micIcon.textContent = micEnabled ? '🎤' : '🔇';
+            testMicBtn.style.transform = 'scale(1)';
+            testMicBtn.textContent = '🎧';
         }
     }, 100);
     
-    alert('Говорите — иконка реагирует');
+    alert('Говорите — иконка будет реагировать');
 });
+
+// ============ 🖥️ ДЕМОНСТРАЦИЯ ЭКРАНА ============
+
+async function startScreenShare() {
+    if (!currentRoom) {
+        alert('Сначала войдите в комнату');
+        return;
+    }
+    
+    if (isSharingScreen) {
+        stopScreenShare();
+        return;
+    }
+    
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+        alert('Ваш браузер не поддерживает демонстрацию экрана.');
+        return;
+    }
+    
+    try {
+        screenStream = await navigator.mediaDevices.getDisplayMedia({
+            video: { cursor: 'always', frameRate: { ideal: 30, max: 60 } },
+            audio: false
+        });
+        
+        isSharingScreen = true;
+        
+        if (screenShareContainer) {
+            screenShareContainer.classList.add('active');
+            const videoOnlyStream = new MediaStream([screenStream.getVideoTracks()[0]]);
+            screenShareVideo.srcObject = videoOnlyStream;
+            screenShareVideo.muted = true;
+            screenShareInfo.textContent = '📺 Вы показываете свой экран';
+            screenShareVideo.play().catch(() => {});
+            
+            if (callWaiting) callWaiting.style.display = 'none';
+        }
+        
+        if (shareScreenBtn) {
+            shareScreenBtn.textContent = '⏹️';
+            shareScreenBtn.classList.remove('primary');
+            shareScreenBtn.classList.add('danger');
+            shareScreenBtn.setAttribute('data-label', 'Остановить');
+        }
+        
+        screenStream.getVideoTracks()[0].onended = () => stopScreenShare();
+        
+        for (const peerUsername of Object.keys(peerConnections)) {
+            const pc = peerConnections[peerUsername];
+            const videoTrack = screenStream.getVideoTracks()[0];
+            
+            let sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+            
+            if (sender) {
+                await sender.replaceTrack(videoTrack);
+            } else {
+                sender = pc.addTrack(videoTrack, screenStream);
+                screenSender = sender;
+                
+                try {
+                    const offer = await pc.createOffer();
+                    await pc.setLocalDescription(offer);
+                    await sendSignal('offer', { offer: pc.localDescription, to: peerUsername });
+                } catch (err) {
+                    console.error('Ошибка пересогласования:', err);
+                }
+            }
+        }
+        
+        console.log('🖥️ Начали трансляцию экрана');
+    } catch (error) {
+        console.error('Ошибка демонстрации:', error);
+        if (error.name !== 'NotAllowedError') {
+            alert('Ошибка демонстрации: ' + error.message);
+        }
+    }
+}
+
+function stopScreenShare() {
+    if (!isSharingScreen && !screenStream) return;
+    
+    console.log('⏹️ Останавливаем трансляцию');
+    
+    if (screenStream) {
+        screenStream.getTracks().forEach(track => track.stop());
+        screenStream = null;
+    }
+    
+    isSharingScreen = false;
+    
+    if (screenShareContainer) {
+        screenShareContainer.classList.remove('active');
+        screenShareVideo.srcObject = null;
+        screenShareInfo.textContent = '';
+    }
+    
+    if (shareScreenBtn) {
+        shareScreenBtn.textContent = '🖥️';
+        shareScreenBtn.classList.remove('danger');
+        shareScreenBtn.classList.add('primary');
+        shareScreenBtn.setAttribute('data-label', 'Экран');
+    }
+    
+    for (const peerUsername of Object.keys(peerConnections)) {
+        const pc = peerConnections[peerUsername];
+        const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+        
+        if (sender) {
+            try {
+                pc.removeTrack(sender);
+                
+                (async () => {
+                    try {
+                        const offer = await pc.createOffer();
+                        await pc.setLocalDescription(offer);
+                        await sendSignal('offer', { offer: pc.localDescription, to: peerUsername });
+                    } catch (err) {
+                        console.error('Ошибка пересогласования:', err);
+                    }
+                })();
+            } catch (err) {}
+        }
+    }
+    
+    screenSender = null;
+    
+    if (Object.keys(peerConnections).length === 0) {
+        if (callWaiting) callWaiting.style.display = 'flex';
+    }
+}
+
+shareScreenBtn?.addEventListener('click', startScreenShare);
+
+// ============ PEER CONNECTION ============
 
 function createPeerConnection(peerUsername) {
     if (peerConnections[peerUsername]) return peerConnections[peerUsername];
     
     const pc = new RTCPeerConnection(ICE_SERVERS);
     peerConnections[peerUsername] = pc;
+    pendingCandidates[peerUsername] = [];
+    makingOffer[peerUsername] = false;
     
     if (localStream) {
         localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
     }
     
+    try {
+        pc.addTransceiver('video', { direction: 'sendrecv' });
+    } catch (e) {}
+    
     pc.ontrack = (event) => {
-        let audioEl = document.getElementById(`audio-${peerUsername}`);
-        if (!audioEl) {
-            audioEl = document.createElement('audio');
-            audioEl.id = `audio-${peerUsername}`;
-            audioEl.autoplay = true;
-            audioEl.playsInline = true;
-            remoteAudios.appendChild(audioEl);
+        const track = event.track;
+        console.log(`📺 Получен ${track.kind} трек от ${peerUsername}`);
+        
+        if (track.kind === 'audio') {
+            let audioEl = document.getElementById(`audio-${peerUsername}`);
+            if (!audioEl) {
+                audioEl = document.createElement('audio');
+                audioEl.id = `audio-${peerUsername}`;
+                audioEl.autoplay = true;
+                audioEl.playsInline = true;
+                remoteAudios.appendChild(audioEl);
+            }
+            
+            const audioOnlyStream = new MediaStream([track]);
+            audioEl.srcObject = audioOnlyStream;
+            audioEl.volume = 1.0;
+            
+            audioEl.play()
+                .then(() => {
+                    console.log(`🔊 Аудио от ${peerUsername} воспроизводится`);
+                    callRoomStatus.textContent = `🔊 Говорите с ${peerUsername}`;
+                    startSpeakingDetection(peerUsername, audioOnlyStream);
+                })
+                .catch(err => {
+                    console.error(`❌ Ошибка воспроизведения:`, err);
+                    callRoomStatus.innerHTML = `
+                        🔊 Аудио получено. 
+                        <button onclick="document.getElementById('audio-${peerUsername}').play()" 
+                                style="margin-left:10px; padding:5px 15px; background:#48bb78; color:white; border:none; border-radius:6px; cursor:pointer;">
+                            ▶️ Включить звук
+                        </button>
+                    `;
+                });
+        } else if (track.kind === 'video') {
+            if (screenShareContainer) {
+                screenShareContainer.classList.add('active');
+                
+                const videoOnlyStream = new MediaStream([track]);
+                screenShareVideo.srcObject = videoOnlyStream;
+                screenShareInfo.textContent = `📺 ${peerUsername} показывает экран`;
+                
+                screenShareVideo.play()
+                    .then(() => console.log(`🖥️ Видео от ${peerUsername} воспроизводится`))
+                    .catch(err => console.warn('Autoplay видео:', err));
+                
+                if (callWaiting) callWaiting.style.display = 'none';
+                
+                track.onended = () => {
+                    console.log(`⏹️ ${peerUsername} остановил трансляцию`);
+                    screenShareContainer.classList.remove('active');
+                    screenShareVideo.srcObject = null;
+                    screenShareInfo.textContent = '';
+                    updateParticipants();
+                };
+            }
         }
-        audioEl.srcObject = event.streams[0];
-        callRoomStatus.textContent = `🔊 Говорите с ${peerUsername}`;
     };
     
     pc.onicecandidate = (event) => {
@@ -771,15 +1110,22 @@ function createPeerConnection(peerUsername) {
     };
     
     pc.onconnectionstatechange = () => {
+        console.log(`Соединение с ${peerUsername}: ${pc.connectionState}`);
         if (pc.connectionState === 'connected') {
             callRoomStatus.textContent = `✅ Соединено с ${peerUsername}`;
-        } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
-            callRoomStatus.textContent = `❌ Соединение потеряно`;
+            if (callWaiting) callWaiting.style.display = 'none';
+        } else if (pc.connectionState === 'disconnected') {
+            callRoomStatus.textContent = `⚠️ Соединение потеряно`;
+        } else if (pc.connectionState === 'failed') {
+            callRoomStatus.textContent = `❌ Соединение не удалось`;
+            try { pc.restartIce(); } catch (e) {}
         }
     };
     
     return pc;
 }
+
+// ============ СИГНАЛИНГ ============
 
 async function sendSignal(type, data) {
     if (!currentRoom) return;
@@ -805,8 +1151,18 @@ function startSignalPolling() {
             if (response.ok) {
                 const signals = await response.json();
                 for (const signal of signals) {
+                    const signalKey = signal.id || `${signal.from}_${signal.type}_${signal.createdAt}`;
+                    if (processedSignals.has(signalKey)) continue;
+                    processedSignals.add(signalKey);
+                    
                     await handleSignal(signal);
-                    lastSignalTime = Math.max(lastSignalTime, new Date(signal.createdAt).getTime());
+                    
+                    const t = typeof signal.createdAt === 'number' 
+                        ? signal.createdAt 
+                        : new Date(signal.createdAt).getTime();
+                    if (!isNaN(t)) {
+                        lastSignalTime = Math.max(lastSignalTime, t);
+                    }
                 }
             }
         } catch (error) {
@@ -816,8 +1172,16 @@ function startSignalPolling() {
 }
 
 async function handleSignal(signal) {
-    const data = JSON.parse(signal.data);
+    let data;
+    try {
+        data = JSON.parse(signal.data);
+    } catch (e) {
+        console.error('Ошибка парсинга сигнала:', e);
+        return;
+    }
     const from = signal.from;
+    
+    console.log(`📨 Сигнал от ${from}: ${signal.type}`);
     
     try {
         switch (signal.type) {
@@ -828,64 +1192,195 @@ async function handleSignal(signal) {
             case 'leave': handleLeave(from); break;
         }
     } catch (error) {
-        console.error('Ошибка обработки сигнала:', error);
+        console.error(`Ошибка обработки "${signal.type}":`, error);
     }
 }
 
 async function handleJoin(peerUsername) {
+    console.log(`👋 ${peerUsername} вошёл`);
+    
+    if (peerConnections[peerUsername] && 
+        peerConnections[peerUsername].connectionState !== 'closed') {
+        console.log(`Соединение с ${peerUsername} уже существует`);
+        return;
+    }
+    
+    const shouldInitiate = adminUser < peerUsername;
+    
+    if (!shouldInitiate) {
+        console.log(`⏸️ Ждём offer от ${peerUsername}`);
+        return;
+    }
+    
     const pc = createPeerConnection(peerUsername);
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    await sendSignal('offer', { offer: pc.localDescription, to: peerUsername });
-    updateParticipants();
-    callRoomStatus.textContent = `🔗 Подключение к ${peerUsername}...`;
+    makingOffer[peerUsername] = true;
+    
+    try {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        await sendSignal('offer', { offer: pc.localDescription, to: peerUsername });
+        updateParticipants();
+        callRoomStatus.textContent = `🔗 Подключение к ${peerUsername}...`;
+    } finally {
+        makingOffer[peerUsername] = false;
+    }
 }
 
 async function handleOffer(from, data) {
+    console.log(`📥 Offer от ${from}`);
+    
     const pc = createPeerConnection(from);
-    await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-    await sendSignal('answer', { answer: pc.localDescription, to: from });
-    updateParticipants();
+    
+    const offerCollision = makingOffer[from] || pc.signalingState !== 'stable';
+    const isPolite = adminUser > from;
+    
+    if (offerCollision && !isPolite) {
+        console.log(`⏭️ Игнорируем offer (мы инициатор)`);
+        return;
+    }
+    
+    if (offerCollision && isPolite) {
+        console.log(`🔄 Откатываем локальное состояние (collision)`);
+        try {
+            await pc.setLocalDescription({ type: 'rollback' });
+        } catch (e) {
+            console.warn('Rollback не удался:', e);
+        }
+    }
+    
+    try {
+        await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+        await flushPendingCandidates(from);
+        
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        await sendSignal('answer', { answer: pc.localDescription, to: from });
+        updateParticipants();
+    } catch (e) {
+        console.error('Ошибка в handleOffer:', e);
+    }
 }
 
 async function handleAnswer(from, data) {
     const pc = peerConnections[from];
-    if (!pc) return;
-    await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+    if (!pc) {
+        console.warn(`Нет pc для ${from}`);
+        return;
+    }
+    
+    if (pc.signalingState !== 'have-local-offer') {
+        console.warn(`Игнорируем answer: signalingState=${pc.signalingState}`);
+        return;
+    }
+    
+    try {
+        await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+        await flushPendingCandidates(from);
+    } catch (e) {
+        console.error('Ошибка в handleAnswer:', e);
+    }
 }
 
 async function handleCandidate(from, data) {
     const pc = peerConnections[from];
-    if (!pc) return;
+    if (!pc) {
+        if (!pendingCandidates[from]) pendingCandidates[from] = [];
+        pendingCandidates[from].push(data.candidate);
+        return;
+    }
+    
+    if (!pc.remoteDescription || !pc.remoteDescription.type) {
+        if (!pendingCandidates[from]) pendingCandidates[from] = [];
+        pendingCandidates[from].push(data.candidate);
+        console.log(`⏸️ Буферизован ICE от ${from} (${pendingCandidates[from].length})`);
+        return;
+    }
+    
     try {
         await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+        console.log(`✅ ICE от ${from} добавлен`);
     } catch (error) {
         console.error('Ошибка ICE:', error);
     }
 }
 
+async function flushPendingCandidates(from) {
+    const pc = peerConnections[from];
+    if (!pc || !pendingCandidates[from]) return;
+    
+    console.log(`🔄 Применяем ${pendingCandidates[from].length} отложенных ICE от ${from}`);
+    
+    for (const candidate of pendingCandidates[from]) {
+        try {
+            await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (e) {
+            console.warn('Ошибка применения ICE:', e);
+        }
+    }
+    pendingCandidates[from] = [];
+}
+
 function handleLeave(peerUsername) {
+    console.log(`👋 ${peerUsername} вышел`);
     if (peerConnections[peerUsername]) {
         try { peerConnections[peerUsername].close(); } catch (e) {}
         delete peerConnections[peerUsername];
     }
+    delete pendingCandidates[peerUsername];
+    delete makingOffer[peerUsername];
+    
+    stopSpeakingDetection(peerUsername);
+    
     const audioEl = document.getElementById(`audio-${peerUsername}`);
     if (audioEl) audioEl.remove();
+    
+    if (screenShareContainer) {
+        screenShareContainer.classList.remove('active');
+        screenShareVideo.srcObject = null;
+        screenShareInfo.textContent = '';
+    }
+    
     updateParticipants();
+    
     if (Object.keys(peerConnections).length === 0) {
         callRoomStatus.textContent = 'Ожидание собеседника...';
+        if (callWaiting) callWaiting.style.display = 'flex';
     }
 }
 
 function updateParticipants() {
     if (!participantsList) return;
-    const participants = [adminUser, ...Object.keys(peerConnections)];
-    participantsList.innerHTML = participants.map(p => 
-        `<div style="padding: 5px 0; color: #2b6cb0;">${p === adminUser ? '👤 (вы)' : '🎧'} ${p}</div>`
-    ).join('');
+    
+    const allParticipants = [adminUser, ...Object.keys(peerConnections)];
+    
+    participantsList.innerHTML = allParticipants.map(p => {
+        const isMe = p === adminUser;
+        const initial = p.charAt(0).toUpperCase();
+        const micStatus = isMe 
+            ? (micEnabled ? '🎤' : '🔇')
+            : '🎤';
+        
+        return `
+            <div class="participant-item ${isMe ? 'is-me' : ''}" data-username="${p}">
+                <div class="participant-avatar">${initial}</div>
+                <div class="participant-name" title="${p}">${p}${isMe ? ' (вы)' : ''}</div>
+                <div class="participant-speaking"></div>
+                <div class="participant-mic ${micStatus === '🔇' ? 'muted' : ''}">${micStatus}</div>
+            </div>
+        `;
+    }).join('');
+    
+    const waiting = document.getElementById('callWaiting');
+    if (waiting) {
+        if (Object.keys(peerConnections).length > 0 || isSharingScreen) {
+            waiting.style.display = 'none';
+        } else {
+            waiting.style.display = 'flex';
+        }
+    }
 }
+
+// ============ СОБЫТИЯ ============
 
 logoutBtn.addEventListener('click', async () => {
     try {
