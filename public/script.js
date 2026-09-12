@@ -25,14 +25,29 @@ let signalPollingInterval = null;
 let lastSignalTime = 0;
 let micEnabled = true;
 let isCallActive = false;
+let activeParticipants = new Set();
+let peerMicStatus = {};
+
+// ✅ Новые переменные для оптимизации polling
+let isCallConnected = false;
+let pollCount = 0;
 
 // Демонстрация экрана
 let screenStream = null;
 let screenSender = null;
 let isSharingScreen = false;
 
+// Видео с камеры
+let cameraStream = null;
+let cameraSender = null;
+let isCameraOn = false;
+
 // Индикатор говорящего
 let audioAnalyzers = {};
+
+// Обучение
+let lessons = [];
+let currentLessonId = null;
 
 // DOM элементы
 const authPage = document.getElementById('authPage');
@@ -84,16 +99,32 @@ const callRoomStatus = document.getElementById('callRoomStatus');
 const leaveRoomBtn = document.getElementById('leaveRoomBtn');
 const leaveRoomBtnMobile = document.getElementById('leaveRoomBtnMobile');
 const toggleMicBtn = document.getElementById('toggleMicBtn');
-const testMicBtn = document.getElementById('testMicBtn');
+const toggleCamBtn = document.getElementById('toggleCamBtn');
 const participantsList = document.getElementById('participantsList');
 const remoteAudios = document.getElementById('remoteAudios');
 const callWaiting = document.getElementById('callWaiting');
+const myVideoContainer = document.getElementById('myVideoContainer');
+const myVideo = document.getElementById('myVideo');
 
 // Демонстрация экрана DOM
 const shareScreenBtn = document.getElementById('shareScreenBtn');
 const screenShareContainer = document.getElementById('screenShareContainer');
 const screenShareVideo = document.getElementById('screenShareVideo');
 const screenShareInfo = document.getElementById('screenShareInfo');
+
+// Обучение DOM
+const createLessonBtn = document.getElementById('createLessonBtn');
+const lessonsListView = document.getElementById('lessonsListView');
+const lessonsList = document.getElementById('lessonsList');
+const lessonView = document.getElementById('lessonView');
+const lessonContent = document.getElementById('lessonContent');
+const backToLessonsBtn = document.getElementById('backToLessonsBtn');
+const lessonEditor = document.getElementById('lessonEditor');
+const backFromEditorBtn = document.getElementById('backFromEditorBtn');
+const lessonForm = document.getElementById('lessonForm');
+const editorTitle = document.getElementById('editorTitle');
+const lessonSearch = document.getElementById('lessonSearch');
+const lessonCategoryFilter = document.getElementById('lessonCategoryFilter');
 
 // ============ 🎨 ФОН С КВАДРАТИКАМИ ============
 function createSquares() {
@@ -1202,6 +1233,7 @@ function switchTab(tab) {
     if (tab === 'tests') loadTests();
     if (tab === 'leaderboard') loadLeaderboard();
     if (tab === 'calls') loadRooms();
+    if (tab === 'lessons') loadLessons();
 }
 
 // ============ АУТЕНТИФИКАЦИЯ ============
@@ -1478,13 +1510,13 @@ async function joinRoom(roomId, roomName) {
         } catch (mediaError) {
             console.error('Ошибка доступа к микрофону:', mediaError);
             if (mediaError.name === 'NotFoundError') {
-                alert('❌ Микрофон не найден. Подключите микрофон и обновите страницу.');
+                alert('❌ Микрофон не найден.');
             } else if (mediaError.name === 'NotAllowedError') {
-                alert('❌ Доступ к микрофону запрещён. Разрешите доступ в настройках браузера.');
+                alert('❌ Доступ к микрофону запрещён.');
             } else if (mediaError.name === 'NotReadableError') {
                 alert('❌ Микрофон занят другой программой.');
             } else {
-                alert('❌ Ошибка доступа к микрофону: ' + mediaError.message);
+                alert('❌ Ошибка: ' + mediaError.message);
             }
             return;
         }
@@ -1492,15 +1524,22 @@ async function joinRoom(roomId, roomName) {
         currentRoom = { id: roomId, name: roomName };
         isCallActive = true;
         micEnabled = true;
+        isCameraOn = false;
         lastSignalTime = 0;
         peerConnections = {};
         pendingCandidates = {};
         makingOffer = {};
         processedSignals.clear();
+        activeParticipants.clear();
+        peerMicStatus = {};
+        isCallConnected = false;  // ✅ Сброс флага
+        pollCount = 0;             // ✅ Сброс счётчика
         
         callsListView.style.display = 'none';
-        callRoomView.style.display = 'block';
+        callRoomView.style.display = 'flex';
         document.body.classList.add('in-call');
+        const appEl = document.getElementById('app');
+        if (appEl) appEl.style.display = 'none';
         
         callRoomName.textContent = `📞 ${roomName}`;
         callRoomStatus.textContent = 'Ожидание собеседника...';
@@ -1509,6 +1548,14 @@ async function joinRoom(roomId, roomName) {
         toggleMicBtn.textContent = '🎤';
         toggleMicBtn.classList.add('active');
         toggleMicBtn.classList.remove('muted');
+        
+        if (toggleCamBtn) {
+            toggleCamBtn.textContent = '📹';
+            toggleCamBtn.classList.remove('active');
+            toggleCamBtn.setAttribute('data-label', 'Камера');
+        }
+        
+        if (myVideoContainer) myVideoContainer.classList.remove('active');
         
         if (callWaiting) callWaiting.style.display = 'flex';
         
@@ -1525,9 +1572,8 @@ async function joinRoom(roomId, roomName) {
 }
 
 function leaveRoom() {
-    if (isSharingScreen) {
-        stopScreenShare();
-    }
+    if (isSharingScreen) stopScreenShare();
+    if (isCameraOn) stopCamera();
     
     isCallActive = false;
     
@@ -1543,6 +1589,10 @@ function leaveRoom() {
     pendingCandidates = {};
     makingOffer = {};
     processedSignals.clear();
+    activeParticipants.clear();
+    peerMicStatus = {};
+    isCallConnected = false;  // ✅ Сброс
+    pollCount = 0;             // ✅ Сброс
     
     Object.keys(audioAnalyzers).forEach(username => stopSpeakingDetection(username));
     
@@ -1558,9 +1608,12 @@ function leaveRoom() {
     currentRoom = null;
     if (callRoomView) callRoomView.style.display = 'none';
     if (callsListView) callsListView.style.display = 'block';
+    const appEl = document.getElementById('app');
+    if (appEl) appEl.style.display = '';
     if (remoteAudios) remoteAudios.innerHTML = '';
     if (participantsList) participantsList.innerHTML = '';
     if (screenShareContainer) screenShareContainer.classList.remove('active');
+    if (myVideoContainer) myVideoContainer.classList.remove('active');
     
     document.body.classList.remove('in-call');
     
@@ -1587,48 +1640,142 @@ toggleMicBtn?.addEventListener('click', () => {
         toggleMicBtn.classList.toggle('active', micEnabled);
         toggleMicBtn.classList.toggle('muted', !micEnabled);
         
+        sendSignal('mic-status', { username: currentUser, enabled: micEnabled }).catch(() => {});
+        
         updateParticipants();
     }
 });
 
-testMicBtn?.addEventListener('click', () => {
-    if (!localStream) {
+// ============ 📹 КАМЕРА ============
+
+async function startCamera() {
+    if (!currentRoom) {
         alert('Сначала войдите в комнату');
         return;
     }
     
-    const audioContext = new AudioContext();
-    const source = audioContext.createMediaStreamSource(localStream);
-    const analyser = audioContext.createAnalyser();
-    analyser.fftSize = 256;
-    source.connect(analyser);
+    if (isCameraOn) {
+        stopCamera();
+        return;
+    }
     
-    const dataArray = new Uint8Array(analyser.frequencyBinCount);
-    let testCount = 0;
+    // ✅ Ускоряем polling на время пересогласования
+    isCallConnected = false;
+    pollCount = 0;
     
-    const testInterval = setInterval(() => {
-        analyser.getByteFrequencyData(dataArray);
-        const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+    try {
+        cameraStream = await navigator.mediaDevices.getUserMedia({
+            video: {
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
+                facingMode: 'user'
+            },
+            audio: false
+        });
         
-        if (avg > 20) {
-            testMicBtn.style.transform = `scale(${1 + avg / 200})`;
-            testMicBtn.textContent = '🔊';
+        isCameraOn = true;
+        
+        if (myVideoContainer && myVideo) {
+            myVideoContainer.classList.add('active');
+            myVideo.srcObject = cameraStream;
+            myVideo.play().catch(() => {});
+        }
+        
+        if (toggleCamBtn) {
+            toggleCamBtn.textContent = '📹';
+            toggleCamBtn.classList.add('active');
+            toggleCamBtn.setAttribute('data-label', 'Выкл. камеру');
+        }
+        
+        const videoTrack = cameraStream.getVideoTracks()[0];
+        
+        for (const peerUsername of Object.keys(peerConnections)) {
+            const pc = peerConnections[peerUsername];
+            
+            let sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+            
+            if (sender) {
+                await sender.replaceTrack(videoTrack);
+            } else {
+                cameraSender = pc.addTrack(videoTrack, cameraStream);
+                
+                try {
+                    const offer = await pc.createOffer();
+                    await pc.setLocalDescription(offer);
+                    await sendSignal('offer', { offer: pc.localDescription, to: peerUsername });
+                } catch (err) {
+                    console.error('Ошибка пересогласования:', err);
+                }
+            }
+        }
+        
+        console.log('📹 Камера включена');
+    } catch (error) {
+        console.error('Ошибка камеры:', error);
+        if (error.name === 'NotFoundError') {
+            alert('❌ Камера не найдена. Подключите веб-камеру.');
+        } else if (error.name === 'NotAllowedError') {
+            alert('❌ Доступ к камере запрещён. Разрешите доступ в браузере.');
+        } else if (error.name === 'NotReadableError') {
+            alert('❌ Камера занята другой программой.');
         } else {
-            testMicBtn.style.transform = 'scale(1)';
-            testMicBtn.textContent = '🎧';
+            alert('❌ Ошибка камеры: ' + error.message);
         }
-        
-        testCount++;
-        if (testCount > 50) {
-            clearInterval(testInterval);
-            audioContext.close();
-            testMicBtn.style.transform = 'scale(1)';
-            testMicBtn.textContent = '🎧';
-        }
-    }, 100);
+    }
+}
+
+function stopCamera() {
+    if (!isCameraOn && !cameraStream) return;
     
-    alert('Говорите — иконка будет реагировать');
-});
+    console.log('⏹️ Выключаем камеру');
+    
+    // ✅ Ускоряем polling на время пересогласования
+    isCallConnected = false;
+    pollCount = 0;
+    
+    if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+        cameraStream = null;
+    }
+    
+    isCameraOn = false;
+    
+    if (myVideoContainer) {
+        myVideoContainer.classList.remove('active');
+        if (myVideo) myVideo.srcObject = null;
+    }
+    
+    if (toggleCamBtn) {
+        toggleCamBtn.textContent = '📹';
+        toggleCamBtn.classList.remove('active');
+        toggleCamBtn.setAttribute('data-label', 'Камера');
+    }
+    
+    for (const peerUsername of Object.keys(peerConnections)) {
+        const pc = peerConnections[peerUsername];
+        const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+        
+        if (sender) {
+            try {
+                pc.removeTrack(sender);
+                
+                (async () => {
+                    try {
+                        const offer = await pc.createOffer();
+                        await pc.setLocalDescription(offer);
+                        await sendSignal('offer', { offer: pc.localDescription, to: peerUsername });
+                    } catch (err) {
+                        console.error('Ошибка пересогласования:', err);
+                    }
+                })();
+            } catch (err) {}
+        }
+    }
+    
+    cameraSender = null;
+}
+
+toggleCamBtn?.addEventListener('click', startCamera);
 
 // ============ 🖥️ ДЕМОНСТРАЦИЯ ЭКРАНА ============
 
@@ -1648,6 +1795,10 @@ async function startScreenShare() {
         return;
     }
     
+    // ✅ Ускоряем polling на время пересогласования
+    isCallConnected = false;
+    pollCount = 0;
+    
     try {
         screenStream = await navigator.mediaDevices.getDisplayMedia({
             video: { cursor: 'always', frameRate: { ideal: 30, max: 60 } },
@@ -1656,7 +1807,6 @@ async function startScreenShare() {
         
         isSharingScreen = true;
         
-        // ✅ Показываем свой экран в основном окне
         if (screenShareContainer) {
             screenShareContainer.classList.add('active');
             const videoOnlyStream = new MediaStream([screenStream.getVideoTracks()[0]]);
@@ -1713,6 +1863,10 @@ function stopScreenShare() {
     
     console.log('⏹️ Останавливаем трансляцию');
     
+    // ✅ Ускоряем polling на время пересогласования
+    isCallConnected = false;
+    pollCount = 0;
+    
     if (screenStream) {
         screenStream.getTracks().forEach(track => track.stop());
         screenStream = null;
@@ -1756,9 +1910,7 @@ function stopScreenShare() {
     
     screenSender = null;
     
-    if (Object.keys(peerConnections).length === 0) {
-        if (callWaiting) callWaiting.style.display = 'flex';
-    }
+    updateParticipants();
 }
 
 shareScreenBtn?.addEventListener('click', startScreenShare);
@@ -1786,7 +1938,6 @@ function createPeerConnection(peerUsername) {
         console.log(`📺 Получен ${track.kind} трек от ${peerUsername}`);
         
         if (track.kind === 'audio') {
-            // ✅ Аудио — отдельный элемент, только аудио
             let audioEl = document.getElementById(`audio-${peerUsername}`);
             if (!audioEl) {
                 audioEl = document.createElement('audio');
@@ -1817,26 +1968,50 @@ function createPeerConnection(peerUsername) {
                     `;
                 });
         } else if (track.kind === 'video') {
-            // ✅ Видео — только видео
+            screenShareVideo.dataset.fromUser = peerUsername;
+            
+            const clearVideo = () => {
+                console.log(`⏹️ ${peerUsername} выключил видео`);
+                screenShareContainer.classList.remove('active');
+                screenShareVideo.srcObject = null;
+                screenShareVideo.dataset.fromUser = '';
+                screenShareInfo.textContent = '';
+                updateParticipants();
+            };
+            
             if (screenShareContainer) {
                 screenShareContainer.classList.add('active');
                 
                 const videoOnlyStream = new MediaStream([track]);
                 screenShareVideo.srcObject = videoOnlyStream;
-                screenShareInfo.textContent = `📺 ${peerUsername} показывает экран`;
+                screenShareVideo.muted = false;
+                
+                const isScreenShare = track.label && 
+                    (track.label.toLowerCase().includes('screen') || 
+                     track.label.toLowerCase().includes('display') ||
+                     track.label.toLowerCase().includes('window'));
+                
+                screenShareInfo.textContent = isScreenShare 
+                    ? `🖥️ ${peerUsername} показывает экран`
+                    : `📹 ${peerUsername}`;
                 
                 screenShareVideo.play()
-                    .then(() => console.log(`🖥️ Видео от ${peerUsername} воспроизводится`))
+                    .then(() => console.log(`🎥 Видео от ${peerUsername} воспроизводится`))
                     .catch(err => console.warn('Autoplay видео:', err));
                 
                 if (callWaiting) callWaiting.style.display = 'none';
                 
-                track.onended = () => {
-                    console.log(`⏹️ ${peerUsername} остановил трансляцию`);
-                    screenShareContainer.classList.remove('active');
-                    screenShareVideo.srcObject = null;
-                    screenShareInfo.textContent = '';
-                    updateParticipants();
+                track.onended = clearVideo;
+                track.onmute = () => {
+                    console.log(`🔇 Видео от ${peerUsername} заглушено`);
+                    clearVideo();
+                };
+                track.onunmute = () => {
+                    console.log(`🔊 Видео от ${peerUsername} восстановлено`);
+                    const stream = new MediaStream([track]);
+                    screenShareVideo.srcObject = stream;
+                    screenShareContainer.classList.add('active');
+                    screenShareVideo.play().catch(() => {});
                 };
             }
         }
@@ -1848,15 +2023,29 @@ function createPeerConnection(peerUsername) {
         }
     };
     
+    // ✅ Оптимизация polling после соединения
     pc.onconnectionstatechange = () => {
         console.log(`Соединение с ${peerUsername}: ${pc.connectionState}`);
+        
         if (pc.connectionState === 'connected') {
             callRoomStatus.textContent = `✅ Соединено с ${peerUsername}`;
             if (callWaiting) callWaiting.style.display = 'none';
+            
+            // Проверяем, все ли соединения установлены
+            const allConnected = Object.values(peerConnections).every(
+                conn => conn.connectionState === 'connected'
+            );
+            
+            if (allConnected && Object.keys(peerConnections).length > 0) {
+                isCallConnected = true;
+                console.log('🐢 Все соединения установлены, замедляем polling до 5 сек');
+            }
         } else if (pc.connectionState === 'disconnected') {
             callRoomStatus.textContent = `⚠️ Соединение потеряно`;
+            isCallConnected = false; // Возобновляем быстрый polling
         } else if (pc.connectionState === 'failed') {
             callRoomStatus.textContent = `❌ Соединение не удалось`;
+            isCallConnected = false;
             try { pc.restartIce(); } catch (e) {}
         }
     };
@@ -1864,7 +2053,7 @@ function createPeerConnection(peerUsername) {
     return pc;
 }
 
-// ============ СИГНАЛИНГ ============
+// ============ СИГНАЛИНГ (ОПТИМИЗИРОВАННЫЙ) ============
 
 async function sendSignal(type, data) {
     if (!currentRoom) return;
@@ -1882,8 +2071,18 @@ async function sendSignal(type, data) {
 function startSignalPolling() {
     if (signalPollingInterval) clearInterval(signalPollingInterval);
     
+    pollCount = 0;
+    
     signalPollingInterval = setInterval(async () => {
         if (!currentRoom || !isCallActive) return;
+        
+        pollCount++;
+        
+        // ✅ Если соединение установлено — опрашиваем реже
+        if (isCallConnected) {
+            // Проверяем каждый 5-й тик = 5 секунд
+            if (pollCount % 5 !== 0) return;
+        }
         
         try {
             const response = await fetch(`/api/calls/signal/${currentRoom.id}?lastTime=${lastSignalTime}`);
@@ -1893,6 +2092,13 @@ function startSignalPolling() {
                     const signalKey = signal.id || `${signal.from}_${signal.type}_${signal.createdAt}`;
                     if (processedSignals.has(signalKey)) continue;
                     processedSignals.add(signalKey);
+                    
+                    // Если пришёл новый сигнал — ускоряем polling
+                    if (isCallConnected) {
+                        console.log('⚡ Новый сигнал, ускоряем polling');
+                        isCallConnected = false;
+                        pollCount = 0;
+                    }
                     
                     await handleSignal(signal);
                     
@@ -1929,6 +2135,7 @@ async function handleSignal(signal) {
             case 'answer': await handleAnswer(from, data); break;
             case 'candidate': await handleCandidate(from, data); break;
             case 'leave': handleLeave(from); break;
+            case 'mic-status': handleMicStatus(from, data); break;
         }
     } catch (error) {
         console.error(`Ошибка обработки "${signal.type}":`, error);
@@ -1937,6 +2144,15 @@ async function handleSignal(signal) {
 
 async function handleJoin(peerUsername) {
     console.log(`👋 ${peerUsername} вошёл`);
+    
+    const wasAlreadyIn = activeParticipants.has(peerUsername);
+    activeParticipants.add(peerUsername);
+    updateParticipants();
+    
+    if (!wasAlreadyIn) {
+        sendSignal('join', { username: currentUser }).catch(() => {});
+        sendSignal('mic-status', { username: currentUser, enabled: micEnabled }).catch(() => {});
+    }
     
     if (peerConnections[peerUsername] && 
         peerConnections[peerUsername].connectionState !== 'closed') {
@@ -1963,6 +2179,12 @@ async function handleJoin(peerUsername) {
     } finally {
         makingOffer[peerUsername] = false;
     }
+}
+
+function handleMicStatus(peerUsername, data) {
+    console.log(`🎤 ${peerUsername} микрофон: ${data.enabled ? 'включён' : 'выключен'}`);
+    peerMicStatus[peerUsername] = data.enabled;
+    updateParticipants();
 }
 
 async function handleOffer(from, data) {
@@ -2061,6 +2283,10 @@ async function flushPendingCandidates(from) {
 
 function handleLeave(peerUsername) {
     console.log(`👋 ${peerUsername} вышел`);
+    
+    activeParticipants.delete(peerUsername);
+    delete peerMicStatus[peerUsername];
+    
     if (peerConnections[peerUsername]) {
         try { peerConnections[peerUsername].close(); } catch (e) {}
         delete peerConnections[peerUsername];
@@ -2073,15 +2299,21 @@ function handleLeave(peerUsername) {
     const audioEl = document.getElementById(`audio-${peerUsername}`);
     if (audioEl) audioEl.remove();
     
-    if (screenShareContainer) {
+    if (screenShareVideo && screenShareVideo.dataset.fromUser === peerUsername) {
         screenShareContainer.classList.remove('active');
         screenShareVideo.srcObject = null;
+        screenShareVideo.dataset.fromUser = '';
         screenShareInfo.textContent = '';
+    }
+    
+    // Если кто-то вышел — сбрасываем флаг, polling снова быстрый
+    if (Object.keys(peerConnections).length === 0) {
+        isCallConnected = false;
     }
     
     updateParticipants();
     
-    if (Object.keys(peerConnections).length === 0) {
+    if (Object.keys(peerConnections).length === 0 && activeParticipants.size === 0) {
         callRoomStatus.textContent = 'Ожидание собеседника...';
         if (callWaiting) callWaiting.style.display = 'flex';
     }
@@ -2090,14 +2322,21 @@ function handleLeave(peerUsername) {
 function updateParticipants() {
     if (!participantsList) return;
     
-    const allParticipants = [currentUser, ...Object.keys(peerConnections)];
+    const othersInRoom = new Set([
+        ...activeParticipants,
+        ...Object.keys(peerConnections)
+    ]);
+    
+    const allParticipants = [currentUser, ...othersInRoom];
     
     participantsList.innerHTML = allParticipants.map(p => {
         const isMe = p === currentUser;
         const initial = p.charAt(0).toUpperCase();
+        
+        // Реальный статус микрофона
         const micStatus = isMe 
             ? (micEnabled ? '🎤' : '🔇')
-            : '🎤';
+            : (peerMicStatus[p] === false ? '🔇' : '🎤');
         
         return `
             <div class="participant-item ${isMe ? 'is-me' : ''}" data-username="${p}">
@@ -2111,13 +2350,319 @@ function updateParticipants() {
     
     const waiting = document.getElementById('callWaiting');
     if (waiting) {
-        if (Object.keys(peerConnections).length > 0 || isSharingScreen) {
+        const hasAnyone = othersInRoom.size > 0;
+        const hasActiveVideo = screenShareContainer?.classList.contains('active') 
+            && screenShareVideo?.srcObject;
+        
+        if (hasAnyone || hasActiveVideo || isSharingScreen || isCameraOn) {
             waiting.style.display = 'none';
         } else {
             waiting.style.display = 'flex';
         }
     }
 }
+
+// ============ 📚 ОБУЧЕНИЕ ============
+
+async function loadLessons() {
+    try {
+        const response = await fetch('/api/lessons');
+        if (response.ok) {
+            lessons = await response.json();
+            renderLessonCategoryFilter();
+            renderLessons();
+            
+            if (createLessonBtn) {
+                createLessonBtn.style.display = currentRole === 'admin' ? 'inline-block' : 'none';
+            }
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки статей:', error);
+    }
+}
+
+function renderLessonCategoryFilter() {
+    if (!lessonCategoryFilter) return;
+    const categories = [...new Set(lessons.map(l => l.category || 'Другое'))];
+    lessonCategoryFilter.innerHTML = '<option value="">📚 Все категории</option>' +
+        categories.map(c => `<option value="${c}">${c}</option>`).join('');
+}
+
+function renderLessons() {
+    if (!lessonsList) return;
+    
+    const searchText = (lessonSearch?.value || '').toLowerCase();
+    const filterCat = lessonCategoryFilter?.value || '';
+    
+    let filtered = lessons;
+    if (searchText) {
+        filtered = filtered.filter(l => 
+            (l.title || '').toLowerCase().includes(searchText) ||
+            (l.content || '').toLowerCase().includes(searchText)
+        );
+    }
+    if (filterCat) {
+        filtered = filtered.filter(l => (l.category || 'Другое') === filterCat);
+    }
+    
+    if (filtered.length === 0) {
+        lessonsList.innerHTML = `
+            <div style="text-align: center; padding: 40px; color: #718096;">
+                <p>📭 Пока нет материалов</p>
+                ${currentRole === 'admin' ? '<p style="font-size: 14px;">Нажмите "Создать статью" чтобы добавить первую тему</p>' : ''}
+            </div>
+        `;
+        return;
+    }
+    
+    let html = '';
+    filtered.forEach(lesson => {
+        const dateStr = lesson.createdAt ? new Date(lesson.createdAt).toLocaleDateString() : '';
+        html += `
+            <div class="test-card" style="cursor: pointer;" onclick="openLesson('${lesson.id}')">
+                <div class="test-card-header">
+                    <div style="flex: 1;">
+                        <h3>📖 ${lesson.title}</h3>
+                        <div class="meta">
+                            <span style="background: #ebf4ff; color: #2b6cb0; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 600;">
+                                ${lesson.category || 'Другое'}
+                            </span>
+                            ${lesson.createdBy ? ` • Автор: ${lesson.createdBy}` : ''}
+                            ${dateStr ? ` • ${dateStr}` : ''}
+                        </div>
+                    </div>
+                    ${currentRole === 'admin' ? `
+                        <div class="actions" onclick="event.stopPropagation();">
+                            <button class="btn-secondary btn-edit-lesson" data-id="${lesson.id}" style="padding: 6px 12px;">✏️</button>
+                            <button class="btn-small btn-danger btn-delete-lesson" data-id="${lesson.id}">🗑️</button>
+                        </div>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+    });
+    
+    lessonsList.innerHTML = html;
+    
+    lessonsList.querySelectorAll('.btn-edit-lesson').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            editLesson(this.dataset.id);
+        });
+    });
+    
+    lessonsList.querySelectorAll('.btn-delete-lesson').forEach(btn => {
+        btn.addEventListener('click', async function(e) {
+            e.stopPropagation();
+            if (!confirm('Удалить статью?')) return;
+            try {
+                const response = await fetch(`/api/lessons/${this.dataset.id}`, { method: 'DELETE' });
+                if (response.ok) {
+                    alert('Статья удалена!');
+                    loadLessons();
+                }
+            } catch (error) {
+                alert('Ошибка удаления');
+            }
+        });
+    });
+}
+
+async function openLesson(id) {
+    try {
+        const response = await fetch(`/api/lessons/${id}`);
+        if (response.ok) {
+            const lesson = await response.json();
+            showLesson(lesson);
+        }
+    } catch (error) {
+        alert('Ошибка загрузки статьи');
+    }
+}
+
+function formatLessonContent(content) {
+    if (!content) return '';
+    
+    let html = content
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    
+    html = html.replace(/^### (.+)$/gm, '<h3 style="color: #2d3748; margin: 25px 0 12px; font-size: 1.3em;">$1</h3>');
+    html = html.replace(/^## (.+)$/gm, '<h2 style="color: #2d3748; margin: 30px 0 15px; font-size: 1.5em;">$1</h2>');
+    html = html.replace(/^# (.+)$/gm, '<h1 style="color: #2d3748; margin: 35px 0 20px; font-size: 1.8em;">$1</h1>');
+    
+    html = html.replace(/\*\*(.+?)\*\*/g, '<strong style="color: #1a202c;">$1</strong>');
+    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    
+    html = html.replace(/\n\n/g, '</p><p style="margin: 15px 0;">');
+    html = html.replace(/\n/g, '<br>');
+    
+    return `<p style="margin: 15px 0;">${html}</p>`;
+}
+
+function showLesson(lesson) {
+    lessonsListView.style.display = 'none';
+    lessonView.style.display = 'block';
+    lessonEditor.style.display = 'none';
+    currentLessonId = lesson.id;
+    
+    const formattedContent = formatLessonContent(lesson.content || '');
+    
+    let formulasHtml = '';
+    if (lesson.formulas && lesson.formulas.length > 0) {
+        formulasHtml = `
+            <div style="background: linear-gradient(135deg, #fefcbf 0%, #faf089 100%); border-left: 5px solid #d69e2e; padding: 25px; border-radius: 15px; margin: 30px 0;">
+                <h3 style="color: #744210; margin: 0 0 18px; font-size: 1.3em;">🧮 Формулы</h3>
+                ${lesson.formulas.map(f => `
+                    <div style="font-family: 'Courier New', monospace; font-size: 18px; padding: 12px 18px; background: white; border-radius: 8px; margin-bottom: 10px; color: #744210; font-weight: 600; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                        ${f}
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    }
+    
+    let examplesHtml = '';
+    if (lesson.examples && lesson.examples.length > 0) {
+        examplesHtml = `
+            <div style="background: linear-gradient(135deg, #e6fffa 0%, #b2f5ea 100%); border-left: 5px solid #38b2ac; padding: 25px; border-radius: 15px; margin: 30px 0;">
+                <h3 style="color: #234e52; margin: 0 0 18px; font-size: 1.3em;">💡 Примеры решения задач</h3>
+                ${lesson.examples.map((ex, i) => `
+                    <div style="padding: 15px; background: white; border-radius: 10px; margin-bottom: 10px; color: #234e52; line-height: 1.6; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                        <strong style="color: #2c7a7b;">Пример ${i + 1}.</strong> ${ex}
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    }
+    
+    lessonContent.innerHTML = `
+        <div style="background: white; padding: 40px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.08);">
+            <div style="border-bottom: 3px solid #e2e8f0; padding-bottom: 20px; margin-bottom: 30px;">
+                <h1 style="color: #2d3748; margin: 0 0 15px; font-size: 2em;">📖 ${lesson.title}</h1>
+                <div style="color: #718096; font-size: 14px;">
+                    <span style="background: #ebf4ff; color: #2b6cb0; padding: 4px 14px; border-radius: 14px; font-size: 13px; font-weight: 600;">
+                        ${lesson.category || 'Другое'}
+                    </span>
+                    ${lesson.createdBy ? ` • Автор: ${lesson.createdBy}` : ''}
+                </div>
+            </div>
+            
+            <div style="line-height: 1.85; color: #2d3748; font-size: 16px;">
+                ${formattedContent}
+            </div>
+            
+            ${formulasHtml}
+            ${examplesHtml}
+            
+            <div style="margin-top: 40px; padding-top: 25px; border-top: 2px solid #e2e8f0; text-align: center;">
+                <button onclick="goToTestsByCategory('${lesson.category || 'Другое'}')" class="btn-primary" style="background: linear-gradient(135deg, #48bb78 0%, #38a169 100%); font-size: 16px; padding: 14px 30px;">
+                    🎯 Пройти тесты по теме "${lesson.category || 'Другое'}"
+                </button>
+            </div>
+        </div>
+    `;
+    
+    window.scrollTo(0, 0);
+}
+
+function goToTestsByCategory(category) {
+    switchTab('tests');
+    setTimeout(() => {
+        if (categoryFilter) {
+            categoryFilter.value = category;
+            renderTests();
+        }
+    }, 100);
+}
+
+function editLesson(id) {
+    const lesson = lessons.find(l => l.id === id);
+    if (!lesson) return;
+    
+    lessonsListView.style.display = 'none';
+    lessonView.style.display = 'none';
+    lessonEditor.style.display = 'block';
+    
+    editorTitle.textContent = `✏️ Редактирование: ${lesson.title}`;
+    document.getElementById('lessonId').value = lesson.id;
+    document.getElementById('lessonTitle').value = lesson.title || '';
+    document.getElementById('lessonCategory').value = lesson.category || 'Другое';
+    document.getElementById('lessonContentInput').value = lesson.content || '';
+    document.getElementById('lessonFormulas').value = (lesson.formulas || []).join('\n');
+    document.getElementById('lessonExamples').value = (lesson.examples || []).join('\n');
+    
+    window.scrollTo(0, 0);
+}
+
+function showLessonEditor() {
+    lessonsListView.style.display = 'none';
+    lessonView.style.display = 'none';
+    lessonEditor.style.display = 'block';
+    
+    editorTitle.textContent = '📝 Создать статью';
+    lessonForm.reset();
+    document.getElementById('lessonId').value = '';
+    
+    window.scrollTo(0, 0);
+}
+
+function backToLessonsList() {
+    lessonsListView.style.display = 'block';
+    lessonView.style.display = 'none';
+    lessonEditor.style.display = 'none';
+    loadLessons();
+}
+
+// Обработчики обучения
+createLessonBtn?.addEventListener('click', showLessonEditor);
+backToLessonsBtn?.addEventListener('click', backToLessonsList);
+backFromEditorBtn?.addEventListener('click', backToLessonsList);
+document.getElementById('cancelLessonBtn')?.addEventListener('click', backToLessonsList);
+
+lessonSearch?.addEventListener('input', renderLessons);
+lessonCategoryFilter?.addEventListener('change', renderLessons);
+
+lessonForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const id = document.getElementById('lessonId').value;
+    const title = document.getElementById('lessonTitle').value.trim();
+    const category = document.getElementById('lessonCategory').value;
+    const content = document.getElementById('lessonContentInput').value.trim();
+    const formulas = document.getElementById('lessonFormulas').value
+        .split('\n').map(f => f.trim()).filter(f => f);
+    const examples = document.getElementById('lessonExamples').value
+        .split('\n').map(ex => ex.trim()).filter(ex => ex);
+    
+    if (!title || !content) {
+        alert('Заполните заголовок и содержание');
+        return;
+    }
+    
+    try {
+        const url = id ? `/api/lessons/${id}` : '/api/lessons';
+        const method = id ? 'PUT' : 'POST';
+        
+        const response = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title, category, content, formulas, examples })
+        });
+        
+        if (response.ok) {
+            alert(id ? '✅ Статья обновлена!' : '✅ Статья создана!');
+            backToLessonsList();
+        } else {
+            const data = await response.json();
+            alert(data.error || 'Ошибка сохранения');
+        }
+    } catch (error) {
+        console.error('Ошибка:', error);
+        alert('Ошибка сервера');
+    }
+});
 
 // ============ СОБЫТИЯ ============
 

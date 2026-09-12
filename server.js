@@ -81,6 +81,7 @@ const memoryDB = {
     results: {},
     callRooms: {},
     callSignals: [],
+    lessons: {},
     testIdCounter: 1
 };
 
@@ -873,7 +874,182 @@ app.get('/api/test', (req, res) => {
         firebase: firebaseInitialized ? 'connected' : 'not connected'
     });
 });
+// ============ 📚 ОБУЧЕНИЕ ============
 
+// Создать статью
+app.post('/api/lessons', async (req, res) => {
+    const token = req.cookies.token;
+    if (!token) return res.status(401).json({ error: 'Не авторизован' });
+    
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        if (decoded.role !== 'admin') {
+            return res.status(403).json({ error: 'Доступ только для администратора' });
+        }
+        
+        const { title, category, content, formulas, examples } = req.body;
+        
+        if (!title || !content) {
+            return res.status(400).json({ error: 'Нужны заголовок и содержание' });
+        }
+        
+        const lesson = {
+            title,
+            category: category || 'Другое',
+            content,
+            formulas: Array.isArray(formulas) ? formulas : [],
+            examples: Array.isArray(examples) ? examples : [],
+            createdBy: decoded.username,
+            createdAt: new Date()
+        };
+        
+        let created;
+        if (firebaseInitialized) {
+            const docRef = await db.collection('lessons').add(lesson);
+            created = { id: docRef.id, ...lesson };
+        } else {
+            const lessonId = 'lesson_' + Date.now();
+            created = { id: lessonId, ...lesson };
+            memoryDB.lessons[lessonId] = created;
+        }
+        
+        console.log(`📚 Создана статья: ${title}`);
+        res.json({ success: true, lesson: created });
+    } catch (error) {
+        console.error('Ошибка создания статьи:', error);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    }
+});
+
+// Получить все статьи
+app.get('/api/lessons', async (req, res) => {
+    const token = req.cookies.token;
+    if (!token) return res.status(401).json({ error: 'Не авторизован' });
+    
+    try {
+        jwt.verify(token, JWT_SECRET);
+        
+        let lessons = [];
+        if (firebaseInitialized) {
+            const snapshot = await db.collection('lessons').get();
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                let createdAt = data.createdAt;
+                if (createdAt && typeof createdAt.toDate === 'function') {
+                    createdAt = createdAt.toDate().toISOString();
+                }
+                lessons.push({ id: doc.id, ...data, createdAt });
+            });
+        } else {
+            lessons = Object.values(memoryDB.lessons || {});
+        }
+        
+        lessons.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        res.json(lessons);
+    } catch (error) {
+        console.error('Ошибка получения статей:', error);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    }
+});
+
+// Получить одну статью
+app.get('/api/lessons/:id', async (req, res) => {
+    const token = req.cookies.token;
+    if (!token) return res.status(401).json({ error: 'Не авторизован' });
+    
+    try {
+        jwt.verify(token, JWT_SECRET);
+        
+        let lesson = null;
+        if (firebaseInitialized) {
+            const doc = await db.collection('lessons').doc(req.params.id).get();
+            if (doc.exists) {
+                const data = doc.data();
+                let createdAt = data.createdAt;
+                if (createdAt && typeof createdAt.toDate === 'function') {
+                    createdAt = createdAt.toDate().toISOString();
+                }
+                lesson = { id: doc.id, ...data, createdAt };
+            }
+        } else {
+            lesson = memoryDB.lessons[req.params.id] || null;
+        }
+        
+        if (!lesson) return res.status(404).json({ error: 'Статья не найдена' });
+        res.json(lesson);
+    } catch (error) {
+        console.error('Ошибка получения статьи:', error);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    }
+});
+
+// Обновить статью
+app.put('/api/lessons/:id', async (req, res) => {
+    const token = req.cookies.token;
+    if (!token) return res.status(401).json({ error: 'Не авторизован' });
+    
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        if (decoded.role !== 'admin') {
+            return res.status(403).json({ error: 'Доступ только для администратора' });
+        }
+        
+        const { title, category, content, formulas, examples } = req.body;
+        const lessonId = req.params.id;
+        
+        const updatedLesson = {
+            title,
+            category: category || 'Другое',
+            content,
+            formulas: Array.isArray(formulas) ? formulas : [],
+            examples: Array.isArray(examples) ? examples : [],
+            updatedAt: new Date()
+        };
+        
+        if (firebaseInitialized) {
+            const doc = await db.collection('lessons').doc(lessonId).get();
+            if (!doc.exists) return res.status(404).json({ error: 'Статья не найдена' });
+            await db.collection('lessons').doc(lessonId).update(updatedLesson);
+        } else {
+            if (!memoryDB.lessons[lessonId]) {
+                return res.status(404).json({ error: 'Статья не найдена' });
+            }
+            memoryDB.lessons[lessonId] = { ...memoryDB.lessons[lessonId], ...updatedLesson };
+        }
+        
+        console.log(`📚 Обновлена статья: ${title}`);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Ошибка обновления статьи:', error);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    }
+});
+
+// Удалить статью
+app.delete('/api/lessons/:id', async (req, res) => {
+    const token = req.cookies.token;
+    if (!token) return res.status(401).json({ error: 'Не авторизован' });
+    
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        if (decoded.role !== 'admin') {
+            return res.status(403).json({ error: 'Доступ только для администратора' });
+        }
+        
+        const lessonId = req.params.id;
+        
+        if (firebaseInitialized) {
+            await db.collection('lessons').doc(lessonId).delete();
+        } else {
+            delete memoryDB.lessons[lessonId];
+        }
+        
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Ошибка удаления статьи:', error);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    }
+});
 // ВСЕГДА В КОНЦЕ!
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));

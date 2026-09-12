@@ -51,17 +51,19 @@
                     <button class="tab-btn" data-tab="stats">📊 Статистика</button>
                     <button class="tab-btn" data-tab="myresults">📈 Мои результаты</button>
                     <button class="tab-btn" data-tab="leaderboard">🏆 Лидеры</button>
+                    <button class="tab-btn" data-tab="lessons">📚 Обучение</button>
                     <button class="tab-btn" data-tab="calls">📞 Звонки</button>
                 </div>
                 <div id="userNav" style="display: none;" class="admin-tabs">
                     <button class="tab-btn active" data-tab="tests">📝 Доступные тесты</button>
                     <button class="tab-btn" data-tab="myresults">📈 Мои результаты</button>
                     <button class="tab-btn" data-tab="leaderboard">🏆 Лидеры</button>
+                    <button class="tab-btn" data-tab="lessons">📚 Обучение</button>
                     <button class="tab-btn" data-tab="calls">📞 Звонки</button>
                 </div>
             </header>
 
-            <!-- Вкладка: Список тестов -->
+            <!-- Вкладка: Тесты -->
             <div id="tab-tests" class="tab-content active">
                 <div style="margin-bottom: 15px;">
                     <select id="categoryFilter" style="padding: 10px 15px; border: 2px solid #e2e8f0; border-radius: 10px; font-size: 15px; min-width: 200px; cursor: pointer;">
@@ -124,10 +126,77 @@
                 <div id="myResultsContent"></div>
             </div>
 
-            <!-- Вкладка: Таблица лидеров -->
+            <!-- Вкладка: Лидеры -->
             <div id="tab-leaderboard" class="tab-content">
                 <h2>🏆 Таблица лидеров</h2>
                 <div id="leaderboardContent"></div>
+            </div>
+
+            <!-- Вкладка: Обучение -->
+            <div id="tab-lessons" class="tab-content">
+                <div id="lessonsListView">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px;">
+                        <h2 style="margin: 0;">📚 Обучение</h2>
+                        <button id="createLessonBtn" class="btn-primary" style="display: none;">+ Создать статью</button>
+                    </div>
+                    
+                    <div style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
+                        <input type="text" id="lessonSearch" placeholder="🔍 Поиск по темам..." 
+                               style="flex: 1; min-width: 200px; padding: 10px 15px; border: 2px solid #e2e8f0; border-radius: 10px; font-size: 15px;">
+                        <select id="lessonCategoryFilter" 
+                                style="padding: 10px 15px; border: 2px solid #e2e8f0; border-radius: 10px; font-size: 15px; min-width: 180px; cursor: pointer;">
+                            <option value="">📚 Все категории</option>
+                        </select>
+                    </div>
+                    
+                    <div id="lessonsList"></div>
+                </div>
+
+                <div id="lessonView" style="display: none;">
+                    <button id="backToLessonsBtn" class="btn-small" style="margin-bottom: 20px; background: #667eea;">← К списку тем</button>
+                    <div id="lessonContent"></div>
+                </div>
+
+                <div id="lessonEditor" style="display: none;">
+                    <button id="backFromEditorBtn" class="btn-small" style="margin-bottom: 20px;">← Отмена</button>
+                    <h2 id="editorTitle" style="margin-bottom: 20px;">Создать статью</h2>
+                    <form id="lessonForm">
+                        <input type="hidden" id="lessonId">
+                        <div class="form-group">
+                            <label>Заголовок *</label>
+                            <input type="text" id="lessonTitle" placeholder="Например: Законы Ньютона" required>
+                        </div>
+                        <div class="form-group">
+                            <label>📚 Категория</label>
+                            <select id="lessonCategory" style="width: 100%; padding: 12px; border: 2px solid #e2e8f0; border-radius: 10px; font-size: 16px;">
+                                <option value="Механика">Механика</option>
+                                <option value="Термодинамика">Термодинамика</option>
+                                <option value="Электричество">Электричество</option>
+                                <option value="Оптика">Оптика</option>
+                                <option value="Квантовая физика">Квантовая физика</option>
+                                <option value="Астрономия">Астрономия</option>
+                                <option value="Другое" selected>Другое</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>📝 Содержание (поддерживается простая разметка)</label>
+                            <textarea id="lessonContentInput" placeholder="Введите теорию...&#10;&#10;Используйте:&#10;**жирный текст**&#10;*курсив*&#10;### Заголовок раздела" style="min-height: 300px; font-family: monospace; font-size: 15px;"></textarea>
+                            <small style="color: #718096; font-size: 13px;">**жирный** → жирный, ### Заголовок → большой заголовок</small>
+                        </div>
+                        <div class="form-group">
+                            <label>🧮 Формулы (по одной на строку)</label>
+                            <textarea id="lessonFormulas" placeholder="F = m · a&#10;E = m · c²&#10;v = s / t" style="min-height: 100px; font-family: monospace; font-size: 15px;"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>💡 Примеры задач (по одному на строку)</label>
+                            <textarea id="lessonExamples" placeholder="Задача: Тело массой 5 кг... Решение: F = 5 · 2 = 10 Н" style="min-height: 120px; font-family: monospace; font-size: 15px;"></textarea>
+                        </div>
+                        <div style="display: flex; gap: 10px; margin-top: 20px;">
+                            <button type="submit" class="btn-primary">💾 Сохранить</button>
+                            <button type="button" id="cancelLessonBtn" class="btn-secondary">❌ Отмена</button>
+                        </div>
+                    </form>
+                </div>
             </div>
 
             <!-- Вкладка: Звонки -->
@@ -140,46 +209,6 @@
                         <button id="createRoomBtn" class="btn-primary">+ Создать комнату</button>
                     </div>
                     <div id="roomsContainer"></div>
-                </div>
-
-                <!-- Комната (полноэкранная) -->
-                <div id="callRoomView" style="display: none;">
-                    <div class="call-header">
-                        <div class="call-header-info">
-                            <h3 id="callRoomName">📞 Комната</h3>
-                            <small id="callRoomStatus">Ожидание собеседника...</small>
-                        </div>
-                        <div class="call-header-actions">
-                            <button id="leaveRoomBtn" class="btn-small btn-danger">📵 Выйти</button>
-                        </div>
-                    </div>
-
-                    <div class="call-stage">
-                        <div id="callWaiting" class="call-waiting">
-                            <div class="call-waiting-avatar">🎤</div>
-                            <div class="call-waiting-text">Ожидание собеседника...</div>
-                            <div class="call-waiting-sub">Отправьте ссылку другу, чтобы он присоединился</div>
-                        </div>
-
-                        <div id="screenShareContainer">
-                            <div id="screenShareInfo"></div>
-                            <video id="screenShareVideo" autoplay playsinline muted></video>
-                        </div>
-
-                        <div class="call-participants">
-                            <h4>👥 Участники</h4>
-                            <div id="participantsList"></div>
-                        </div>
-                    </div>
-
-                    <div class="call-controls">
-                        <button id="toggleMicBtn" class="call-btn active" data-label="Микрофон" disabled>🎤</button>
-                        <button id="testMicBtn" class="call-btn" data-label="Проверить">🎧</button>
-                        <button id="shareScreenBtn" class="call-btn primary" data-label="Экран">🖥️</button>
-                        <button id="leaveRoomBtnMobile" class="call-btn danger" data-label="Выйти">📵</button>
-                    </div>
-
-                    <div id="remoteAudios"></div>
                 </div>
             </div>
         </div>
@@ -223,6 +252,53 @@
                 <div id="resultsContent"></div>
             </div>
         </div>
+    </div>
+
+    <!-- КОМНАТА ЗВОНКА -->
+    <div id="callRoomView" style="display: none;">
+        <div class="call-header">
+            <div class="call-header-info">
+                <h3 id="callRoomName">📞 Комната</h3>
+                <small id="callRoomStatus">Ожидание собеседника...</small>
+            </div>
+            <div class="call-header-actions">
+                <button id="leaveRoomBtn" class="btn-small btn-danger">📵 Выйти</button>
+            </div>
+        </div>
+
+        <div class="call-stage">
+            <div id="callWaiting" class="call-waiting">
+                <div class="call-waiting-avatar">🎤</div>
+                <div class="call-waiting-text">Ожидание собеседника...</div>
+                <div class="call-waiting-sub">Отправьте ссылку другу, чтобы он присоединился</div>
+            </div>
+
+            <!-- Большое видео собеседника (камера или экран) -->
+            <div id="screenShareContainer">
+                <div id="screenShareInfo"></div>
+                <video id="screenShareVideo" autoplay playsinline muted></video>
+            </div>
+
+            <!-- Своё видео (PiP в углу) -->
+            <div id="myVideoContainer">
+                <video id="myVideo" autoplay playsinline muted></video>
+                <div id="myVideoLabel">Вы</div>
+            </div>
+
+            <div class="call-participants">
+                <h4>👥 Участники</h4>
+                <div id="participantsList"></div>
+            </div>
+        </div>
+
+        <div class="call-controls">
+            <button id="toggleMicBtn" class="call-btn active" data-label="Микрофон" disabled>🎤</button>
+            <button id="toggleCamBtn" class="call-btn" data-label="Камера">📹</button>
+            <button id="shareScreenBtn" class="call-btn primary" data-label="Экран">🖥️</button>
+            <button id="leaveRoomBtnMobile" class="call-btn danger" data-label="Выйти">📵</button>
+        </div>
+
+        <div id="remoteAudios"></div>
     </div>
 
     <script src="script.js"></script>

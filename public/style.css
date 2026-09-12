@@ -1,7 +1,12 @@
+/* ============ БАЗОВЫЕ СТИЛИ ============ */
 * {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
+}
+
+html, body {
+    height: 100%;
 }
 
 body {
@@ -11,6 +16,11 @@ body {
     position: relative;
     overflow-x: hidden;
     background: #0a0a2a;
+}
+
+body.in-call {
+    overflow: hidden;
+    padding: 0;
 }
 
 /* ============ 🎨 ФОН С КВАДРАТИКАМИ ============ */
@@ -27,83 +37,34 @@ body {
 
 .square {
     position: absolute;
-    width: 60px;
-    height: 60px;
-    background: rgba(102, 126, 234, 0.1);
-    border: 1px solid rgba(102, 126, 234, 0.15);
+    width: 40px;
+    height: 40px;
+    background: rgba(102, 126, 234, 0.15);
+    border: 1px solid rgba(102, 126, 234, 0.2);
     border-radius: 8px;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     opacity: 0;
-    transform: scale(0.8);
+    transform: scale(0.5) rotate(0deg);
+    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    pointer-events: none;
 }
 
-.square.visible {
-    opacity: 1;
-    transform: scale(1);
-    background: rgba(102, 126, 234, 0.3);
-    border-color: rgba(102, 126, 234, 0.6);
-    box-shadow: 0 0 30px rgba(102, 126, 234, 0.3);
+.square.active {
+    opacity: 1 !important;
+    transform: scale(1) rotate(0deg) !important;
+    background: rgba(102, 126, 234, 0.3) !important;
+    border-color: rgba(102, 126, 234, 0.6) !important;
+    box-shadow: 0 0 30px rgba(102, 126, 234, 0.2) !important;
 }
 
-.square:hover {
-    background: rgba(102, 126, 234, 0.5) !important;
-    border-color: #667eea !important;
-    box-shadow: 0 0 50px rgba(102, 126, 234, 0.5) !important;
-    transform: scale(1.1) !important;
-}
+.square.size-1 { width: 25px; height: 25px; }
+.square.size-2 { width: 40px; height: 40px; }
+.square.size-3 { width: 55px; height: 55px; }
+.square.size-4 { width: 70px; height: 70px; }
 
-/* Разные размеры квадратиков */
-.square.small {
-    width: 30px;
-    height: 30px;
-}
-
-.square.medium {
-    width: 50px;
-    height: 50px;
-}
-
-.square.large {
-    width: 80px;
-    height: 80px;
-}
-
-/* Цвета квадратиков */
-.square.color-1 {
-    background: rgba(102, 126, 234, 0.1);
-    border-color: rgba(102, 126, 234, 0.2);
-}
-.square.color-1.visible {
-    background: rgba(102, 126, 234, 0.3);
-    border-color: rgba(102, 126, 234, 0.6);
-}
-
-.square.color-2 {
-    background: rgba(118, 75, 162, 0.1);
-    border-color: rgba(118, 75, 162, 0.2);
-}
-.square.color-2.visible {
-    background: rgba(118, 75, 162, 0.3);
-    border-color: rgba(118, 75, 162, 0.6);
-}
-
-.square.color-3 {
-    background: rgba(237, 137, 54, 0.1);
-    border-color: rgba(237, 137, 54, 0.2);
-}
-.square.color-3.visible {
-    background: rgba(237, 137, 54, 0.3);
-    border-color: rgba(237, 137, 54, 0.6);
-}
-
-.square.color-4 {
-    background: rgba(72, 187, 120, 0.1);
-    border-color: rgba(72, 187, 120, 0.2);
-}
-.square.color-4.visible {
-    background: rgba(72, 187, 120, 0.3);
-    border-color: rgba(72, 187, 120, 0.6);
-}
+.square.color-1 { background: rgba(102, 126, 234, 0.1); border-color: rgba(102, 126, 234, 0.15); }
+.square.color-2 { background: rgba(118, 75, 162, 0.1); border-color: rgba(118, 75, 162, 0.15); }
+.square.color-3 { background: rgba(237, 137, 54, 0.1); border-color: rgba(237, 137, 54, 0.15); }
+.square.color-4 { background: rgba(72, 187, 120, 0.1); border-color: rgba(72, 187, 120, 0.15); }
 
 /* ============ КОНТЕЙНЕР ============ */
 .container {
@@ -118,7 +79,7 @@ body {
     backdrop-filter: blur(10px);
 }
 
-/* Auth styles */
+/* ============ АВТОРИЗАЦИЯ ============ */
 .auth-box {
     text-align: center;
     padding: 20px;
@@ -175,6 +136,7 @@ body {
     resize: vertical;
 }
 
+/* ============ КНОПКИ ============ */
 .btn-primary {
     padding: 12px 30px;
     background: #667eea;
@@ -185,6 +147,7 @@ body {
     font-weight: 600;
     cursor: pointer;
     transition: all 0.3s;
+    margin: 5px;
 }
 
 .btn-primary:hover {
@@ -203,6 +166,7 @@ body {
     font-weight: 600;
     cursor: pointer;
     transition: all 0.3s;
+    margin: 5px;
 }
 
 .btn-secondary:hover {
@@ -254,13 +218,30 @@ body {
     cursor: not-allowed;
 }
 
+.btn-edit {
+    padding: 6px 15px;
+    background: #edf2f7;
+    color: #4a5568;
+    border: 2px solid #a0aec0;
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.btn-edit:hover {
+    background: #e2e8f0;
+    border-color: #667eea;
+    transform: scale(1.05);
+}
+
 .error-message {
     color: #fc8181;
     margin: 10px 0;
     font-size: 14px;
 }
 
-/* Header */
+/* ============ HEADER ============ */
 header {
     border-bottom: 2px solid #e2e8f0;
     padding-bottom: 15px;
@@ -316,7 +297,7 @@ header {
     font-size: 14px;
 }
 
-/* Tests list */
+/* ============ ТЕСТЫ ============ */
 .test-card {
     background: #f7fafc;
     border-radius: 15px;
@@ -359,7 +340,7 @@ header {
     gap: 10px;
 }
 
-/* Questions */
+/* ============ ВОПРОСЫ ============ */
 .question-item {
     background: #f7fafc;
     border-radius: 15px;
@@ -424,7 +405,7 @@ header {
     flex-wrap: wrap;
 }
 
-/* Results */
+/* ============ РЕЗУЛЬТАТЫ ============ */
 .results-box {
     text-align: center;
 }
@@ -470,7 +451,17 @@ header {
     border-left: 4px solid #fc8181;
 }
 
-/* Admin tabs */
+.answer-detail .hint-text {
+    font-size: 12px;
+    color: #d69e2e;
+    margin-top: 4px;
+    padding: 4px 8px;
+    background: #fefcbf;
+    border-radius: 4px;
+    display: inline-block;
+}
+
+/* ============ ВКЛАДКИ ============ */
 .admin-tabs {
     display: flex;
     gap: 10px;
@@ -506,7 +497,7 @@ header {
     display: block;
 }
 
-/* Question editor */
+/* ============ РЕДАКТОР ВОПРОСОВ ============ */
 .question-editor {
     background: #f7fafc;
     border-radius: 10px;
@@ -559,7 +550,7 @@ header {
     background: #f56565;
 }
 
-/* Stats */
+/* ============ СТАТИСТИКА ============ */
 .stats-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -610,17 +601,9 @@ header {
     min-width: 60px;
 }
 
-.leaderboard-item .rank.gold {
-    color: #f6ad55;
-}
-
-.leaderboard-item .rank.silver {
-    color: #a0aec0;
-}
-
-.leaderboard-item .rank.bronze {
-    color: #ed8936;
-}
+.leaderboard-item .rank.gold { color: #f6ad55; }
+.leaderboard-item .rank.silver { color: #a0aec0; }
+.leaderboard-item .rank.bronze { color: #ed8936; }
 
 .leaderboard-item .info {
     flex: 1;
@@ -644,149 +627,17 @@ header {
     color: #667eea;
 }
 
-.leaderboard-item .score.excellent {
-    color: #48bb78;
-}
+.leaderboard-item .score.excellent { color: #48bb78; }
+.leaderboard-item .score.good { color: #ed8936; }
+.leaderboard-item .score.poor { color: #fc8181; }
 
-.leaderboard-item .score.good {
-    color: #ed8936;
-}
-
-.leaderboard-item .score.poor {
-    color: #fc8181;
-}
-
-/* Auth footer */
+/* ============ FOOTER АВТОРИЗАЦИИ ============ */
 .auth-footer {
     margin-top: 20px;
     color: #a0aec0;
 }
 
-/* Responsive */
-@media (max-width: 600px) {
-    .container {
-        padding: 15px;
-    }
-    
-    .header-content {
-        flex-direction: column;
-        align-items: stretch;
-        text-align: center;
-    }
-    
-    .user-info {
-        justify-content: center;
-    }
-    
-    .navigation {
-        flex-direction: column;
-    }
-    
-    .btn-nav, .btn-primary {
-        width: 100%;
-    }
-    
-    .question-editor .options-editor {
-        grid-template-columns: 1fr;
-    }
-    
-    .test-card-header {
-        flex-direction: column;
-        align-items: stretch;
-    }
-    
-    .leaderboard-item {
-        flex-direction: column;
-        text-align: center;
-    }
-    
-    .leaderboard-item .rank {
-        margin-bottom: 5px;
-    }
-}
-/* ============ 🎨 ФОН С КВАДРАТИКАМИ ============ */
-#background-squares {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 0;
-    pointer-events: none;
-    overflow: hidden;
-}
-
-.square {
-    position: absolute;
-    width: 40px;
-    height: 40px;
-    background: rgba(102, 126, 234, 0.15);
-    border: 1px solid rgba(102, 126, 234, 0.2);
-    border-radius: 8px;
-    opacity: 0;
-    transform: scale(0.5) rotate(0deg);
-    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-    pointer-events: none;
-}
-
-.square.active {
-    opacity: 1 !important;
-    transform: scale(1) rotate(0deg) !important;
-    background: rgba(102, 126, 234, 0.3) !important;
-    border-color: rgba(102, 126, 234, 0.6) !important;
-    box-shadow: 0 0 30px rgba(102, 126, 234, 0.2) !important;
-}
-
-/* Разные размеры квадратиков */
-.square.size-1 {
-    width: 25px;
-    height: 25px;
-}
-
-.square.size-2 {
-    width: 40px;
-    height: 40px;
-}
-
-.square.size-3 {
-    width: 55px;
-    height: 55px;
-}
-
-.square.size-4 {
-    width: 70px;
-    height: 70px;
-}
-
-/* Цвета квадратиков */
-.square.color-1 {
-    background: rgba(102, 126, 234, 0.1);
-    border-color: rgba(102, 126, 234, 0.15);
-}
-
-.square.color-2 {
-    background: rgba(118, 75, 162, 0.1);
-    border-color: rgba(118, 75, 162, 0.15);
-}
-
-.square.color-3 {
-    background: rgba(237, 137, 54, 0.1);
-    border-color: rgba(237, 137, 54, 0.15);
-}
-
-.square.color-4 {
-    background: rgba(72, 187, 120, 0.1);
-    border-color: rgba(72, 187, 120, 0.15);
-}
-
-/* Эффект при наведении на квадратик */
-.square.hover-effect {
-    background: rgba(102, 126, 234, 0.5) !important;
-    border-color: #667eea !important;
-    box-shadow: 0 0 50px rgba(102, 126, 234, 0.4) !important;
-    transform: scale(1.2) rotate(5deg) !important;
-}
-/* ============ СТИЛИ ДЛЯ ПОДСКАЗКИ ============ */
+/* ============ ПОДСКАЗКИ ============ */
 #hintContainer {
     animation: fadeIn 0.3s ease;
 }
@@ -828,166 +679,6 @@ header {
     box-shadow: 0 0 0 3px rgba(214, 158, 46, 0.2);
 }
 
-.answer-detail .hint-text {
-    font-size: 12px;
-    color: #d69e2e;
-    margin-top: 4px;
-    padding: 4px 8px;
-    background: #fefcbf;
-    border-radius: 4px;
-    display: inline-block;
-}
-/* Стиль для кнопки редактирования */
-.btn-edit {
-    padding: 6px 15px;
-    background: #edf2f7;
-    color: #4a5568;
-    border: 2px solid #a0aec0;
-    border-radius: 8px;
-    font-size: 14px;
-    cursor: pointer;
-    transition: all 0.3s;
-}
-
-.btn-edit:hover {
-    background: #e2e8f0;
-    border-color: #667eea;
-    transform: scale(1.05);
-}
-
-/* Анимация для кнопок */
-.btn-edit, .btn-danger, .btn-primary {
-    transition: all 0.3s ease;
-}
-
-/* Вкладка редактирования */
-#tab-edit .question-editor {
-    background: #f7fafc;
-    border-radius: 10px;
-    padding: 20px;
-    margin-bottom: 15px;
-    border: 2px solid #e2e8f0;
-    position: relative;
-}
-
-#tab-edit .question-editor .question-number {
-    position: absolute;
-    top: -12px;
-    left: 15px;
-    background: #667eea;
-    color: white;
-    padding: 2px 15px;
-    border-radius: 20px;
-    font-size: 12px;
-    font-weight: 600;
-}
-/* ============ СТИЛИ ДЛЯ ПОДСКАЗКИ ============ */
-#hintContainer {
-    animation: fadeIn 0.3s ease;
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(-10px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-#hintBtn {
-    background: #edf2f7;
-    border: 2px solid #d69e2e;
-    color: #744210;
-    padding: 8px 20px;
-    border-radius: 10px;
-    cursor: pointer;
-    font-size: 15px;
-    font-weight: 600;
-    transition: all 0.3s;
-}
-
-#hintBtn:hover {
-    background: #fefcbf;
-    transform: scale(1.05);
-}
-
-.hint-input {
-    width: 100%;
-    padding: 8px 12px;
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
-    font-size: 14px;
-    background: #fffff0;
-}
-
-.hint-input:focus {
-    outline: none;
-    border-color: #d69e2e;
-    box-shadow: 0 0 0 3px rgba(214, 158, 46, 0.2);
-}
-
-/* ============ СТИЛИ ДЛЯ РЕДАКТИРОВАНИЯ ============ */
-.btn-edit {
-    padding: 6px 15px;
-    background: #edf2f7;
-    color: #4a5568;
-    border: 2px solid #a0aec0;
-    border-radius: 8px;
-    font-size: 14px;
-    cursor: pointer;
-    transition: all 0.3s;
-}
-
-.btn-edit:hover {
-    background: #e2e8f0;
-    border-color: #667eea;
-    transform: scale(1.05);
-}
-
-#tab-edit .question-editor {
-    background: #f7fafc;
-    border-radius: 10px;
-    padding: 20px;
-    margin-bottom: 15px;
-    border: 2px solid #e2e8f0;
-    position: relative;
-}
-
-#tab-edit .question-editor .question-number {
-    position: absolute;
-    top: -12px;
-    left: 15px;
-    background: #667eea;
-    color: white;
-    padding: 2px 15px;
-    border-radius: 20px;
-    font-size: 12px;
-    font-weight: 600;
-}
-
-#tab-edit .question-editor .options-editor {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-    margin: 10px 0;
-}
-
-#tab-edit .question-editor .options-editor input {
-    padding: 8px 12px;
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
-}
-
-#tab-edit .question-editor .remove-question {
-    margin-top: 10px;
-    background: #fc8181;
-    color: white;
-    border: none;
-    padding: 5px 15px;
-    border-radius: 6px;
-    cursor: pointer;
-}
-
-#tab-edit .question-editor .remove-question:hover {
-    background: #f56565;
-}
 /* ============ ТАЙМЕР ============ */
 #timerDisplay {
     transition: all 0.3s;
@@ -1012,11 +703,6 @@ header {
 
 .input-answer-block {
     animation: fadeIn 0.3s ease;
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(-10px); }
-    to { opacity: 1; transform: translateY(0); }
 }
 
 /* ============ КАТЕГОРИИ ============ */
@@ -1042,7 +728,7 @@ header {
     margin-right: 5px;
 }
 
-/* ============ РЕДАКТОР ВОПРОСОВ ============ */
+/* ============ РЕДАКТОР ТИПОВ ============ */
 .q-type {
     background: #f7fafc;
     cursor: pointer;
@@ -1052,7 +738,6 @@ header {
     transition: all 0.3s;
 }
 
-/* ============ СОХРАНЕНИЕ ПРОГРЕССА ============ */
 .progress-badge {
     background: #c6f6d5;
     color: #22543d;
@@ -1062,112 +747,68 @@ header {
     font-weight: 600;
     margin-left: 8px;
 }
-/* ============ ТАЙМЕР ============ */
-#timerDisplay {
-    transition: all 0.3s;
-    animation: pulse 2s infinite;
+
+/* ============================================================
+   📞 ЗВОНКИ — ПОЛНОЭКРАННЫЙ РЕЖИМ
+   ============================================================ */
+
+/* Блокируем скролл html, когда body.in-call */
+html:has(body.in-call) {
+    overflow: hidden !important;
+    height: 100% !important;
 }
 
-@keyframes pulse {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.05); }
+/* ✅ Жёсткий сброс body в режиме звонка */
+body.in-call {
+    overflow: hidden !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: #1a1a2e !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
 }
 
-/* ============ ВВОД ОТВЕТА ============ */
-.text-answer-input {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+/* ✅ Скрываем всё лишнее, пока идёт звонок */
+body.in-call #app,
+body.in-call #background-squares {
+    display: none !important;
 }
 
-.text-answer-input:focus {
-    outline: none;
-    border-color: #667eea !important;
-    box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.15);
-}
-
-.input-answer-block {
-    animation: fadeIn 0.3s ease;
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(-10px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-/* ============ КАТЕГОРИИ ============ */
-#categoryFilter {
-    background: white;
-    transition: all 0.3s;
-}
-
-#categoryFilter:focus {
-    outline: none;
-    border-color: #667eea;
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-}
-
-/* ============ РЕДАКТОР ВОПРОСОВ ============ */
-.q-type {
-    background: #f7fafc;
-    cursor: pointer;
-}
-
-.options-block, .input-block {
-    transition: all 0.3s;
-}
-
-/* ============ ЗВОНКИ ============ */
-#micIcon {
-    transition: all 0.3s;
-    animation: micPulse 2s infinite;
-}
-
-@keyframes micPulse {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.1); }
-}
-
-#callRoomView audio {
-    display: none;
-}
-
-.btn-join {
-    background: #48bb78;
-}
-
-.btn-join:hover {
-    background: #38a169;
-}
-
-#participantsList div {
-    font-size: 15px;
-    padding: 8px 12px;
-    background: white;
-    border-radius: 8px;
-    margin-bottom: 5px;
-}
-/* ============ 📞 КОМНАТА ЗВОНКА (НОВЫЙ ДИЗАЙН) ============ */
-
+/* Контейнер комнаты звонка — всегда на весь viewport */
 #callRoomView {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    max-width: 100vw !important;
+    max-height: 100vh !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
     background: #1a1a2e;
-    border-radius: 20px;
-    padding: 0;
-    margin-top: 20px;
-    overflow: hidden;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
     display: flex;
     flex-direction: column;
-    min-height: 70vh;
+    z-index: 2147483647 !important; /* max int32 */
+    overflow: hidden;
 }
 
-/* Заголовок комнаты */
 .call-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     padding: 15px 25px;
-    background: rgba(0,0,0,0.3);
+    background: rgba(0,0,0,0.5);
     backdrop-filter: blur(10px);
     border-bottom: 1px solid rgba(255,255,255,0.1);
+    flex-shrink: 0;
 }
 
 .call-header-info h3 {
@@ -1189,418 +830,23 @@ header {
     gap: 10px;
 }
 
-/* Основная область с видео */
 .call-stage {
-    flex: 1;
+    flex: 1 1 auto;
     position: relative;
     background: #0f0f1e;
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: 400px;
-    padding: 20px;
     overflow: hidden;
+    min-height: 0;
 }
 
-/* Видео собеседника (большое) */
 #screenShareContainer {
     position: absolute;
-    inset: 20px;
-    display: none;
-    flex-direction: column;
-    z-index: 5;
-}
-
-#screenShareContainer.active {
-    display: flex;
-}
-
-#screenShareVideo {
-    flex: 1;
-    width: 100%;
-    background: #000;
-    border-radius: 12px;
-    object-fit: contain;
-    box-shadow: 0 10px 40px rgba(0,0,0,0.6);
-}
-
-#screenShareInfo {
-    position: absolute;
-    top: 15px;
-    left: 15px;
-    background: rgba(0,0,0,0.7);
-    color: white;
-    padding: 8px 16px;
-    border-radius: 20px;
-    font-size: 13px;
-    backdrop-filter: blur(10px);
-    z-index: 10;
-}
-
-/* Заглушка "ожидание" */
-.call-waiting {
-    text-align: center;
-    color: white;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 20px;
-}
-
-.call-waiting-avatar {
-    width: 150px;
-    height: 150px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 70px;
-    box-shadow: 0 20px 60px rgba(102, 126, 234, 0.4);
-    animation: pulseAvatar 2s infinite;
-}
-
-@keyframes pulseAvatar {
-    0%, 100% { transform: scale(1); box-shadow: 0 20px 60px rgba(102, 126, 234, 0.4); }
-    50% { transform: scale(1.05); box-shadow: 0 20px 80px rgba(102, 126, 234, 0.6); }
-}
-
-.call-waiting-text {
-    font-size: 20px;
-    font-weight: 600;
-    color: #e2e8f0;
-}
-
-.call-waiting-sub {
-    color: #a0aec0;
-    font-size: 14px;
-}
-
-/* Своё превью (картинка в картинке) */
-#myScreenShare {
-    position: absolute;
-    bottom: 100px;
-    right: 20px;
-    width: 280px;
-    z-index: 20;
-    display: none;
-    border-radius: 12px;
-    overflow: hidden;
-    box-shadow: 0 15px 40px rgba(0,0,0,0.6);
-    border: 2px solid rgba(159, 122, 234, 0.6);
-    background: #000;
-}
-
-#myScreenShare.active {
-    display: block;
-}
-
-#myScreenShare::before {
-    content: '📺 Вы транслируете';
-    display: block;
-    padding: 8px 12px;
-    background: rgba(159, 122, 234, 0.9);
-    color: white;
-    font-size: 12px;
-    font-weight: 600;
-    text-align: center;
-}
-
-#myScreenVideo {
-    width: 100%;
-    display: block;
-    max-height: 200px;
-    object-fit: cover;
-}
-
-/* Панель управления внизу */
-.call-controls {
-    position: relative;
-    bottom: 0;
+    top: 0;
     left: 0;
     right: 0;
-    padding: 20px;
-    background: rgba(0,0,0,0.5);
-    backdrop-filter: blur(20px);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 15px;
-    border-top: 1px solid rgba(255,255,255,0.1);
-}
-
-.call-btn {
-    width: 60px;
-    height: 60px;
-    border-radius: 50%;
-    border: none;
-    background: rgba(255,255,255,0.1);
-    color: white;
-    font-size: 24px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.3s;
-    position: relative;
-}
-
-.call-btn:hover {
-    background: rgba(255,255,255,0.2);
-    transform: scale(1.1);
-}
-
-.call-btn.active {
-    background: #48bb78;
-}
-
-.call-btn.danger {
-    background: #fc8181;
-}
-
-.call-btn.danger:hover {
-    background: #f56565;
-}
-
-.call-btn.primary {
-    background: #9f7aea;
-}
-
-.call-btn.primary:hover {
-    background: #805ad5;
-}
-
-.call-btn.muted {
-    background: #fc8181;
-}
-
-/* Подписи под кнопками */
-.call-btn::after {
-    content: attr(data-label);
-    position: absolute;
-    bottom: -25px;
-    left: 50%;
-    transform: translateX(-50%);
-    font-size: 11px;
-    color: #a0aec0;
-    white-space: nowrap;
-    opacity: 0;
-    transition: opacity 0.3s;
-    pointer-events: none;
-}
-
-.call-btn:hover::after {
-    opacity: 1;
-}
-
-/* Участники (сбоку) */
-.call-participants {
-    position: absolute;
-    top: 80px;
-    right: 20px;
-    background: rgba(0,0,0,0.6);
-    backdrop-filter: blur(20px);
-    border-radius: 12px;
-    padding: 15px;
-    min-width: 200px;
-    max-width: 250px;
-    z-index: 15;
-    border: 1px solid rgba(255,255,255,0.1);
-}
-
-.call-participants h4 {
-    margin: 0 0 10px 0;
-    color: white;
-    font-size: 14px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.participant-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 8px 10px;
-    background: rgba(255,255,255,0.05);
-    border-radius: 8px;
-    margin-bottom: 5px;
-    color: white;
-    font-size: 14px;
-    transition: all 0.3s;
-}
-
-.participant-item:hover {
-    background: rgba(255,255,255,0.1);
-}
-
-.participant-avatar {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 14px;
-    flex-shrink: 0;
-}
-
-.participant-item.is-me .participant-avatar {
-    background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
-}
-
-.participant-name {
-    flex: 1;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.participant-mic {
-    font-size: 14px;
-    color: #48bb78;
-}
-
-.participant-mic.muted {
-    color: #fc8181;
-}
-
-/* Скрываем старые элементы, если остались */
-#micIcon,
-#callStatus,
-#remoteAudios {
-    display: none !important;
-}
-
-/* Мобильная версия */
-@media (max-width: 768px) {
-    #callRoomView {
-        min-height: 100vh;
-        border-radius: 0;
-        margin: 0;
-    }
-    
-    .call-header {
-        padding: 12px 15px;
-    }
-    
-    .call-header-info h3 {
-        font-size: 1em;
-    }
-    
-    .call-stage {
-        min-height: 300px;
-        padding: 10px;
-    }
-    
-    .call-waiting-avatar {
-        width: 100px;
-        height: 100px;
-        font-size: 50px;
-    }
-    
-    .call-waiting-text {
-        font-size: 16px;
-    }
-    
-    .call-controls {
-        padding: 15px;
-        gap: 10px;
-    }
-    
-    .call-btn {
-        width: 50px;
-        height: 50px;
-        font-size: 20px;
-    }
-    
-    .call-participants {
-        top: 70px;
-        right: 10px;
-        left: 10px;
-        max-width: none;
-    }
-    
-    #myScreenShare {
-        width: 150px;
-        bottom: 90px;
-        right: 10px;
-    }
-    
-    #myScreenVideo {
-        max-height: 100px;
-    }
-}
-/* ============ 📞 ПОЛНОЭКРАННАЯ КОМНАТА ============ */
-
-body.in-call {
-    overflow: hidden;
-}
-
-body.in-call .container {
-    max-width: 100%;
-    padding: 0;
-    border-radius: 0;
-    background: #1a1a2e;
-    box-shadow: none;
-}
-
-body.in-call header {
-    display: none;
-}
-
-body.in-call #background-squares {
-    display: none;
-}
-
-#callRoomView {
-    position: fixed;
-    inset: 0;
-    background: #1a1a2e;
-    display: flex;
-    flex-direction: column;
-    z-index: 1000;
-}
-
-.call-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 15px 25px;
-    background: rgba(0,0,0,0.5);
-    backdrop-filter: blur(10px);
-    border-bottom: 1px solid rgba(255,255,255,0.1);
-    flex-shrink: 0;
-}
-
-.call-header-info h3 {
-    margin: 0;
-    color: white;
-    font-size: 1.3em;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.call-header-info small {
-    color: #a0aec0;
-    font-size: 13px;
-}
-
-.call-stage {
-    flex: 1;
-    position: relative;
-    background: #0f0f1e;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-}
-
-#screenShareContainer {
-    position: absolute;
-    inset: 0;
+    bottom: 0;
     display: none;
     background: #000;
     z-index: 5;
@@ -1804,21 +1050,10 @@ body.in-call #background-squares {
     transform: scale(1.1);
 }
 
-.call-btn.active {
-    background: #48bb78;
-}
-
-.call-btn.danger {
-    background: #fc8181;
-}
-
-.call-btn.primary {
-    background: #9f7aea;
-}
-
-.call-btn.muted {
-    background: #fc8181;
-}
+.call-btn.active { background: #48bb78; }
+.call-btn.danger { background: #fc8181; }
+.call-btn.primary { background: #9f7aea; }
+.call-btn.muted { background: #fc8181; }
 
 .call-btn::after {
     content: attr(data-label);
@@ -1869,7 +1104,7 @@ body.in-call #background-squares {
     }
     
     .call-participants {
-        top: 10px;
+        top: 70px;
         right: 10px;
         left: 10px;
         min-width: auto;
@@ -1886,5 +1121,55 @@ body.in-call #background-squares {
         width: 50px;
         height: 50px;
         font-size: 20px;
+    }
+}
+/* ============ 📹 ВИДЕО В КОМНАТЕ ============ */
+
+/* Своё видео (PiP в углу) */
+#myVideoContainer {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    width: 200px;
+    height: 150px;
+    background: #000;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    border: 2px solid rgba(255,255,255,0.2);
+    z-index: 20;
+    display: none;
+    transition: all 0.3s;
+}
+
+#myVideoContainer.active {
+    display: block;
+}
+
+#myVideo {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transform: scaleX(-1); /* Зеркальное отражение */
+}
+
+#myVideoLabel {
+    position: absolute;
+    bottom: 8px;
+    left: 8px;
+    background: rgba(0,0,0,0.7);
+    color: white;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+@media (max-width: 768px) {
+    #myVideoContainer {
+        width: 120px;
+        height: 90px;
+        bottom: 15px;
+        right: 15px;
     }
 }
