@@ -28,7 +28,7 @@ let isCallActive = false;
 let activeParticipants = new Set();
 let peerMicStatus = {};
 
-// ✅ Новые переменные для оптимизации polling
+// Оптимизация polling
 let isCallConnected = false;
 let pollCount = 0;
 
@@ -49,7 +49,7 @@ let audioAnalyzers = {};
 let lessons = [];
 let currentLessonId = null;
 
-// DOM элементы
+// DOM элементы — авторизация
 const authPage = document.getElementById('authPage');
 const mainPage = document.getElementById('mainPage');
 const testPage = document.getElementById('testPage');
@@ -62,8 +62,26 @@ const logoutBtn = document.getElementById('logoutBtn');
 const authError = document.getElementById('authError');
 const currentUserEl = document.getElementById('currentUser');
 const userRoleEl = document.getElementById('userRole');
+const adminNav = document.getElementById('adminNav');
+const userNav = document.getElementById('userNav');
+
+// DOM элементы — навигация обучения
+const lessonsChoiceView = document.getElementById('lessonsChoiceView');
+const lessonsArticlesView = document.getElementById('lessonsArticlesView');
+const lessonsTestsView = document.getElementById('lessonsTestsView');
+
+// DOM элементы — тесты
 const testsList = document.getElementById('testsList');
-const testTitle = document.getElementById('testTitle');
+const testsListView = document.getElementById('testsListView');
+const testEditor = document.getElementById('testEditor');
+const testEditorTitle = document.getElementById('testEditorTitle');
+const backFromTestEditorBtn = document.getElementById('backFromTestEditorBtn');
+const createTestBtn = document.getElementById('createTestBtn');
+const testTitleDisplay = document.getElementById('testTitleDisplay');
+const categoryFilter = document.getElementById('categoryFilter');
+const testLinkedLessons = document.getElementById('testLinkedLessons');
+
+// DOM элементы — прохождение
 const questionContainer = document.getElementById('questionContainer');
 const questionCounter = document.getElementById('questionCounter');
 const prevBtn = document.getElementById('prevBtn');
@@ -71,25 +89,39 @@ const nextBtn = document.getElementById('nextBtn');
 const submitBtn = document.getElementById('submitBtn');
 const backBtn = document.getElementById('backBtn');
 const backToTestsBtn = document.getElementById('backToTestsBtn');
-const adminNav = document.getElementById('adminNav');
-const userNav = document.getElementById('userNav');
-const createForm = document.getElementById('createTestForm');
-const addQuestionBtn = document.getElementById('addQuestionBtn');
-const questionsList = document.getElementById('questionsList');
-const statsContent = document.getElementById('statsContent');
-const myResultsContent = document.getElementById('myResultsContent');
-const leaderboardContent = document.getElementById('leaderboardContent');
 const timerDisplay = document.getElementById('timerDisplay');
 const timerValue = document.getElementById('timerValue');
-const categoryFilter = document.getElementById('categoryFilter');
-
-// Подсказка
 const hintBtn = document.getElementById('hintBtn');
 const hintContainer = document.getElementById('hintContainer');
 const hintText = document.getElementById('hintText');
 let hintUsed = false;
 
-// Звонки DOM
+// DOM элементы — создание теста
+const createForm = document.getElementById('createTestForm');
+const addQuestionBtn = document.getElementById('addQuestionBtn');
+const questionsList = document.getElementById('questionsList');
+
+// DOM элементы — статистика
+const statsContent = document.getElementById('statsContent');
+const myResultsContent = document.getElementById('myResultsContent');
+const leaderboardContent = document.getElementById('leaderboardContent');
+
+// DOM элементы — обучение
+const createLessonBtn = document.getElementById('createLessonBtn');
+const lessonsListView = document.getElementById('lessonsListView');
+const lessonsList = document.getElementById('lessonsList');
+const lessonView = document.getElementById('lessonView');
+const lessonContent = document.getElementById('lessonContent');
+const backToLessonsBtn = document.getElementById('backToLessonsBtn');
+const lessonEditor = document.getElementById('lessonEditor');
+const backFromEditorBtn = document.getElementById('backFromEditorBtn');
+const lessonForm = document.getElementById('lessonForm');
+const editorTitle = document.getElementById('editorTitle');
+const lessonSearch = document.getElementById('lessonSearch');
+const lessonCategoryFilter = document.getElementById('lessonCategoryFilter');
+const lessonLinkedTests = document.getElementById('lessonLinkedTests');
+
+// DOM элементы — звонки
 const createRoomBtn = document.getElementById('createRoomBtn');
 const roomsContainer = document.getElementById('roomsContainer');
 const callsListView = document.getElementById('callsListView');
@@ -105,26 +137,10 @@ const remoteAudios = document.getElementById('remoteAudios');
 const callWaiting = document.getElementById('callWaiting');
 const myVideoContainer = document.getElementById('myVideoContainer');
 const myVideo = document.getElementById('myVideo');
-
-// Демонстрация экрана DOM
 const shareScreenBtn = document.getElementById('shareScreenBtn');
 const screenShareContainer = document.getElementById('screenShareContainer');
 const screenShareVideo = document.getElementById('screenShareVideo');
 const screenShareInfo = document.getElementById('screenShareInfo');
-
-// Обучение DOM
-const createLessonBtn = document.getElementById('createLessonBtn');
-const lessonsListView = document.getElementById('lessonsListView');
-const lessonsList = document.getElementById('lessonsList');
-const lessonView = document.getElementById('lessonView');
-const lessonContent = document.getElementById('lessonContent');
-const backToLessonsBtn = document.getElementById('backToLessonsBtn');
-const lessonEditor = document.getElementById('lessonEditor');
-const backFromEditorBtn = document.getElementById('backFromEditorBtn');
-const lessonForm = document.getElementById('lessonForm');
-const editorTitle = document.getElementById('editorTitle');
-const lessonSearch = document.getElementById('lessonSearch');
-const lessonCategoryFilter = document.getElementById('lessonCategoryFilter');
 
 // ============ 🎨 ФОН С КВАДРАТИКАМИ ============
 function createSquares() {
@@ -210,6 +226,7 @@ async function checkAuth() {
             currentUser = data.username;
             currentRole = data.role;
             showMainPage();
+            loadLessons();
             loadTests();
             loadMyResults();
             loadLeaderboard();
@@ -265,7 +282,7 @@ function showTestPage(test) {
         currentQuestionIndex = 0;
     }
     
-    testTitle.textContent = test.title;
+    testTitleDisplay.textContent = test.title;
     
     if (test.timeLimit && test.timeLimit > 0) {
         startTimer(test.timeLimit);
@@ -282,6 +299,39 @@ function showResultsPage() {
     mainPage.style.display = 'none';
     testPage.style.display = 'none';
     resultsPage.style.display = 'block';
+}
+
+// ============ НАВИГАЦИЯ ВНУТРИ ОБУЧЕНИЯ ============
+
+function openLessonsArticles() {
+    if (lessonsChoiceView) lessonsChoiceView.style.display = 'none';
+    if (lessonsArticlesView) lessonsArticlesView.style.display = 'block';
+    if (lessonsTestsView) lessonsTestsView.style.display = 'none';
+    
+    loadLessons();
+}
+
+function openLessonsTests() {
+    if (lessonsChoiceView) lessonsChoiceView.style.display = 'none';
+    if (lessonsArticlesView) lessonsArticlesView.style.display = 'none';
+    if (lessonsTestsView) lessonsTestsView.style.display = 'block';
+    
+    loadTests();
+}
+
+function backToLessonsChoice() {
+    if (lessonsChoiceView) lessonsChoiceView.style.display = 'block';
+    if (lessonsArticlesView) lessonsArticlesView.style.display = 'none';
+    if (lessonsTestsView) lessonsTestsView.style.display = 'none';
+    
+    // Сбрасываем внутренние виды статей
+    if (lessonsListView) lessonsListView.style.display = 'block';
+    if (lessonView) lessonView.style.display = 'none';
+    if (lessonEditor) lessonEditor.style.display = 'none';
+    
+    // Сбрасываем внутренние виды тестов
+    if (testsListView) testsListView.style.display = 'block';
+    if (testEditor) testEditor.style.display = 'none';
 }
 
 // ============ ⏱️ ТАЙМЕР ============
@@ -376,6 +426,9 @@ async function loadTests() {
             tests = await response.json();
             renderCategoryFilter();
             renderTests();
+            if (createTestBtn) {
+                createTestBtn.style.display = currentRole === 'admin' ? 'inline-block' : 'none';
+            }
         }
     } catch (error) {
         console.error('Ошибка загрузки тестов:', error);
@@ -470,6 +523,19 @@ async function startTest(testId) {
         const response = await fetch(`/api/tests/${testId}`);
         if (response.ok) {
             const test = await response.json();
+            
+            // Загружаем связанные статьи
+            if (test.linkedLessonIds && test.linkedLessonIds.length > 0) {
+                const linkedLessons = [];
+                for (const lessonId of test.linkedLessonIds) {
+                    try {
+                        const r = await fetch(`/api/lessons/${lessonId}`);
+                        if (r.ok) linkedLessons.push(await r.json());
+                    } catch (e) {}
+                }
+                test.linkedLessons = linkedLessons;
+            }
+            
             showTestPage(test);
         } else {
             alert('Ошибка загрузки теста');
@@ -494,168 +560,178 @@ async function deleteTest(testId) {
     }
 }
 
-// ============ РЕДАКТИРОВАНИЕ ТЕСТА ============
+// ============ РЕДАКТОР ТЕСТА ============
+
+function showTestEditor(test = null) {
+    testEditor.style.display = 'block';
+    testsListView.style.display = 'none';
+    
+    if (test) {
+        testEditorTitle.textContent = `✏️ Редактирование: ${test.title}`;
+        document.getElementById('editTestId').value = test.id;
+        document.getElementById('testTitle').value = test.title || '';
+        document.getElementById('testDescription').value = test.description || '';
+        document.getElementById('testClass').value = test.class || '7-8';
+        document.getElementById('testCategory').value = test.category || 'Другое';
+        document.getElementById('testTimeLimit').value = test.timeLimit || 0;
+        
+        renderTestLinkedLessons(test.linkedLessonIds || []);
+        
+        questionsList.innerHTML = '';
+        questionCounterAdmin = 0;
+        if (test.questions && test.questions.length > 0) {
+            test.questions.forEach(q => addQuestionEditor(q));
+        }
+    } else {
+        testEditorTitle.textContent = '📝 Создать тест';
+        createForm.reset();
+        document.getElementById('editTestId').value = '';
+        questionsList.innerHTML = '';
+        questionCounterAdmin = 0;
+        
+        renderTestLinkedLessons([]);
+    }
+    
+    window.scrollTo(0, 0);
+}
+
+function hideTestEditor() {
+    testEditor.style.display = 'none';
+    testsListView.style.display = 'block';
+    loadTests();
+}
+
+createTestBtn?.addEventListener('click', () => showTestEditor());
+backFromTestEditorBtn?.addEventListener('click', hideTestEditor);
 
 async function editTest(testId) {
-    if (isEditFormOpen) {
-        alert('⚠️ Сначала закройте текущий редактор!');
-        return;
-    }
     try {
         const response = await fetch(`/api/admin/tests/${testId}/edit`);
         if (response.ok) {
             const test = await response.json();
-            const testCard = document.querySelector(`.btn-edit[data-test-id="${testId}"]`)?.closest('.test-card');
-            if (testCard) {
-                showEditForm(test, testCard);
-                isEditFormOpen = true;
-            }
+            showTestEditor(test);
         }
     } catch (error) {
         alert('Ошибка загрузки теста');
     }
 }
 
-function showEditForm(test, testCard) {
-    const categories = ['Механика', 'Термодинамика', 'Электричество', 'Оптика', 'Квантовая физика', 'Астрономия', 'Другое'];
-    const categoryOptions = categories.map(c => 
-        `<option value="${c}" ${(test.category || 'Другое') === c ? 'selected' : ''}>${c}</option>`
-    ).join('');
+// ============ СВЯЗИ: ТЕСТ ← СТАТЬИ ============
+
+function renderTestLinkedLessons(selectedIds = []) {
+    if (!testLinkedLessons) return;
     
-    const editHtml = `
-        <div id="editFormContainer" style="margin-top: 15px; padding: 20px; background: #f7fafc; border-radius: 10px; border: 2px solid #667eea;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                <h4 style="margin: 0; color: #2d3748;">✏️ Редактирование: ${test.title}</h4>
-                <button id="closeEditFormBtn" style="background: #fc8181; color: white; border: none; padding: 5px 15px; border-radius: 6px; cursor: pointer; font-size: 16px;">✕</button>
-            </div>
-            <form id="editTestForm">
-                <input type="hidden" id="editTestId" value="${test.id}">
-                <div class="form-group">
-                    <label>Название теста</label>
-                    <input type="text" id="editTestTitle" value="${test.title || ''}" required>
-                </div>
-                <div class="form-group">
-                    <label>Описание</label>
-                    <textarea id="editTestDescription">${test.description || ''}</textarea>
-                </div>
-                <div class="form-group">
-                    <label>Класс</label>
-                    <input type="text" id="editTestClass" value="${test.class || '7-8'}">
-                </div>
-                <div class="form-group">
-                    <label>📚 Категория</label>
-                    <select id="editTestCategory" style="width: 100%; padding: 12px; border: 2px solid #e2e8f0; border-radius: 10px; font-size: 16px;">
-                        ${categoryOptions}
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>⏱️ Время (мин, 0 = без ограничения)</label>
-                    <input type="number" id="editTestTimeLimit" min="0" max="180" value="${test.timeLimit || 0}">
-                </div>
-                <div id="editQuestionsEditor">
-                    <h4>Вопросы</h4>
-                    <div id="editQuestionsList"></div>
-                    <button type="button" id="addEditQuestionBtn" class="btn-secondary" style="margin-top: 10px;">+ Добавить вопрос</button>
-                </div>
-                <div style="display: flex; gap: 10px; margin-top: 20px;">
-                    <button type="submit" class="btn-primary">💾 Сохранить</button>
-                    <button type="button" id="cancelEditBtn" class="btn-secondary">❌ Отмена</button>
-                </div>
-            </form>
-        </div>
-    `;
-    
-    testCard.insertAdjacentHTML('afterend', editHtml);
-    
-    const editQuestionsList = document.getElementById('editQuestionsList');
-    if (test.questions && test.questions.length > 0) {
-        test.questions.forEach((q, index) => addEditQuestion(q, index + 1));
+    if (lessons.length === 0) {
+        testLinkedLessons.innerHTML = '<p style="color: #718096; padding: 10px;">Нет статей для привязки</p>';
+        return;
     }
     
-    document.getElementById('addEditQuestionBtn')?.addEventListener('click', function() {
-        const count = editQuestionsList.querySelectorAll('.question-editor').length + 1;
-        addEditQuestion(null, count);
-    });
-    
-    document.getElementById('editTestForm')?.addEventListener('submit', async function(e) {
-        e.preventDefault();
-        await saveEditedTest(test.id);
-    });
-    
-    document.getElementById('cancelEditBtn')?.addEventListener('click', closeEditForm);
-    document.getElementById('closeEditFormBtn')?.addEventListener('click', closeEditForm);
+    testLinkedLessons.innerHTML = lessons.map(l => `
+        <label style="display: flex; align-items: center; gap: 10px; padding: 8px 6px; cursor: pointer; border-radius: 6px; transition: background 0.2s;" onmouseover="this.style.background='#e2e8f0'" onmouseout="this.style.background='transparent'">
+            <input type="checkbox" value="${l.id}" ${selectedIds.includes(l.id) ? 'checked' : ''}>
+            <span>📖 <strong>${l.title}</strong></span>
+            <small style="color: #718096; margin-left: auto;">${l.category || 'Другое'}</small>
+        </label>
+    `).join('');
 }
 
-function closeEditForm() {
-    const form = document.getElementById('editFormContainer');
-    if (form) {
-        form.remove();
-        isEditFormOpen = false;
-        loadTests();
+// ============ СВЯЗИ: СТАТЬЯ ← ТЕСТЫ ============
+
+function renderLessonLinkedTests(selectedIds = []) {
+    if (!lessonLinkedTests) return;
+    
+    if (tests.length === 0) {
+        lessonLinkedTests.innerHTML = '<p style="color: #718096; padding: 10px;">Нет тестов для привязки</p>';
+        return;
     }
+    
+    lessonLinkedTests.innerHTML = tests.map(t => `
+        <label style="display: flex; align-items: center; gap: 10px; padding: 8px 6px; cursor: pointer; border-radius: 6px; transition: background 0.2s;" onmouseover="this.style.background='#e2e8f0'" onmouseout="this.style.background='transparent'">
+            <input type="checkbox" value="${t.id}" ${selectedIds.includes(t.id) ? 'checked' : ''}>
+            <span>📝 <strong>${t.title}</strong></span>
+            <small style="color: #718096; margin-left: auto;">${t.category || 'Другое'}</small>
+        </label>
+    `).join('');
 }
 
-function addEditQuestion(questionData, number) {
-    const list = document.getElementById('editQuestionsList');
-    if (!list) return;
+// ============ ДОБАВЛЕНИЕ ВОПРОСА ============
+
+addQuestionBtn.addEventListener('click', () => {
+    addQuestionEditor(null);
+});
+
+function addQuestionEditor(q = null) {
+    questionCounterAdmin++;
+    const num = questionCounterAdmin;
     
-    const q = questionData || {
-        type: 'choice', question: '', options: ['', '', '', ''],
-        correct: 0, correctText: '', hint: ''
+    const data = q || {
+        type: 'choice',
+        question: '',
+        options: ['', '', '', ''],
+        correct: 0,
+        correctText: '',
+        hint: '',
+        image: null
     };
     
-    const type = q.type || 'choice';
-    const isInput = type === 'input';
+    const isInput = data.type === 'input';
     
     const html = `
-        <div class="question-editor" style="background: white; border-radius: 10px; padding: 15px; margin-bottom: 15px; border: 1px solid #e2e8f0; position: relative;">
-            <div class="question-number" style="position: absolute; top: -10px; left: 15px; background: #667eea; color: white; padding: 2px 12px; border-radius: 20px; font-size: 12px; font-weight: 600;">
-                Вопрос ${number}
-            </div>
-            <div class="form-group" style="margin-top: 10px;">
+        <div class="question-editor" style="position: relative;">
+            <div class="question-number">Вопрос ${num}</div>
+            
+            <div class="form-group">
                 <label>Тип</label>
-                <select class="edit-q-type" style="width: 100%; padding: 8px; border: 1px solid #e2e8f0; border-radius: 6px;">
+                <select class="q-type" style="width: 100%; padding: 8px; border: 1px solid #e2e8f0; border-radius: 6px;">
                     <option value="choice" ${!isInput ? 'selected' : ''}>📝 С выбором</option>
                     <option value="input" ${isInput ? 'selected' : ''}>✍️ С вводом</option>
                 </select>
             </div>
+            
             <div class="form-group">
-                <input type="text" class="edit-q-text" placeholder="Введите вопрос" value="${q.question || ''}" required>
+                <input type="text" class="q-text" placeholder="Введите вопрос" value="${data.question || ''}" required>
             </div>
-            <div class="edit-options-block" style="display: ${isInput ? 'none' : 'block'};">
-                <div class="options-editor" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0;">
-                    <input type="text" class="edit-option-input" placeholder="Вариант A" value="${q.options?.[0] || ''}">
-                    <input type="text" class="edit-option-input" placeholder="Вариант B" value="${q.options?.[1] || ''}">
-                    <input type="text" class="edit-option-input" placeholder="Вариант C" value="${q.options?.[2] || ''}">
-                    <input type="text" class="edit-option-input" placeholder="Вариант D" value="${q.options?.[3] || ''}">
+            
+            <div class="form-group">
+                <label>🖼️ Ссылка на картинку (необязательно)</label>
+                <input type="url" class="q-image-url" placeholder="https://cdn.jsdelivr.net/gh/username/physics-images@main/image.jpg" value="${data.image || ''}">
+            </div>
+            
+            <div class="options-block" style="display: ${isInput ? 'none' : 'block'};">
+                <div class="options-editor">
+                    <input type="text" class="option-input" placeholder="Вариант A" value="${data.options?.[0] || ''}">
+                    <input type="text" class="option-input" placeholder="Вариант B" value="${data.options?.[1] || ''}">
+                    <input type="text" class="option-input" placeholder="Вариант C" value="${data.options?.[2] || ''}">
+                    <input type="text" class="option-input" placeholder="Вариант D" value="${data.options?.[3] || ''}">
                 </div>
                 <div class="form-group">
                     <label>Правильный (0-3)</label>
-                    <input type="number" class="edit-correct-option" min="0" max="3" value="${q.correct || 0}">
+                    <input type="number" class="correct-option" min="0" max="3" value="${data.correct || 0}">
                 </div>
             </div>
-            <div class="edit-input-block" style="display: ${isInput ? 'block' : 'none'};">
+            
+            <div class="input-block" style="display: ${isInput ? 'block' : 'none'};">
                 <div class="form-group">
                     <label>✍️ Правильный ответ</label>
-                    <input type="text" class="edit-correct-text" placeholder="Например: 12 или м/с" value="${q.correctText || ''}">
+                    <input type="text" class="correct-text" placeholder="Например: 12 или м/с" value="${data.correctText || ''}">
                 </div>
             </div>
+            
             <div class="form-group">
-                <label>Подсказка</label>
-                <input type="text" class="edit-hint-input" placeholder="Подсказка" value="${q.hint || ''}">
+                <label>💡 Подсказка</label>
+                <input type="text" class="hint-input" placeholder="Подсказка" value="${data.hint || ''}">
             </div>
-            <button type="button" class="remove-question" style="margin-top: 10px; background: #fc8181; color: white; border: none; padding: 5px 15px; border-radius: 6px; cursor: pointer;">
-                ✕ Удалить
-            </button>
+            
+            <button type="button" class="remove-question" onclick="this.parentElement.remove()">✕ Удалить вопрос</button>
         </div>
     `;
     
-    list.insertAdjacentHTML('beforeend', html);
+    questionsList.insertAdjacentHTML('beforeend', html);
     
-    const lastEditor = list.lastElementChild;
-    const typeSelect = lastEditor.querySelector('.edit-q-type');
-    const optionsBlock = lastEditor.querySelector('.edit-options-block');
-    const inputBlock = lastEditor.querySelector('.edit-input-block');
+    const lastEditor = questionsList.lastElementChild;
+    const typeSelect = lastEditor.querySelector('.q-type');
+    const optionsBlock = lastEditor.querySelector('.options-block');
+    const inputBlock = lastEditor.querySelector('.input-block');
     
     typeSelect.addEventListener('change', function() {
         if (this.value === 'input') {
@@ -668,39 +744,43 @@ function addEditQuestion(questionData, number) {
     });
 }
 
-async function saveEditedTest(testId) {
-    const title = document.getElementById('editTestTitle').value.trim();
-    const description = document.getElementById('editTestDescription').value.trim();
-    const classNum = document.getElementById('editTestClass').value.trim();
-    const category = document.getElementById('editTestCategory').value;
-    const timeLimit = document.getElementById('editTestTimeLimit').value;
+// ============ СОХРАНЕНИЕ ТЕСТА ============
+
+createForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
     
-    if (!title) {
-        alert('Введите название');
-        return;
-    }
+    const testId = document.getElementById('editTestId').value;
+    const title = document.getElementById('testTitle').value;
+    const description = document.getElementById('testDescription').value;
+    const classNum = document.getElementById('testClass').value;
+    const category = document.getElementById('testCategory')?.value || 'Другое';
+    const timeLimit = document.getElementById('testTimeLimit')?.value || 0;
     
-    const questionElements = document.querySelectorAll('#editQuestionsList .question-editor');
+    const linkedLessonIds = [...document.querySelectorAll('#testLinkedLessons input:checked')]
+        .map(cb => cb.value);
+    
+    const questionElements = document.querySelectorAll('#questionsList .question-editor');
     const questions = [];
     
     questionElements.forEach(el => {
-        const type = el.querySelector('.edit-q-type').value;
-        const qText = el.querySelector('.edit-q-text').value.trim();
-        const hint = el.querySelector('.edit-hint-input')?.value || '';
+        const type = el.querySelector('.q-type')?.value || 'choice';
+        const qText = el.querySelector('.q-text').value.trim();
+        const hint = el.querySelector('.hint-input')?.value || '';
+        const image = el.querySelector('.q-image-url')?.value.trim() || null;
         
         if (type === 'input') {
-            const correctText = el.querySelector('.edit-correct-text').value.trim();
+            const correctText = el.querySelector('.correct-text')?.value.trim();
             if (qText && correctText) {
-                questions.push({ type: 'input', question: qText, correctText, hint });
+                questions.push({ type: 'input', question: qText, correctText, hint, image });
             }
         } else {
             const options = [];
-            const optionInputs = el.querySelectorAll('.edit-option-input');
+            const optionInputs = el.querySelectorAll('.option-input');
             optionInputs.forEach(input => options.push(input.value.trim()));
-            const correct = parseInt(el.querySelector('.edit-correct-option').value);
+            const correct = parseInt(el.querySelector('.correct-option').value);
             
             if (qText && options.length === 4 && options.every(o => o)) {
-                questions.push({ type: 'choice', question: qText, options, correct, hint });
+                questions.push({ type: 'choice', question: qText, options, correct, hint, image });
             }
         }
     });
@@ -711,22 +791,29 @@ async function saveEditedTest(testId) {
     }
     
     try {
-        const response = await fetch(`/api/tests/${testId}`, {
-            method: 'PUT',
+        const url = testId ? `/api/tests/${testId}` : '/api/tests';
+        const method = testId ? 'PUT' : 'POST';
+        
+        const response = await fetch(url, {
+            method,
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title, description, class: classNum, category, timeLimit, questions })
+            body: JSON.stringify({ 
+                title, description, class: classNum, category, timeLimit, questions, linkedLessonIds 
+            })
         });
         
         if (response.ok) {
-            alert('✅ Тест обновлен!');
-            closeEditForm();
+            alert(testId ? '✅ Тест обновлён!' : '✅ Тест создан!');
+            hideTestEditor();
+            if (currentRole === 'admin') loadStats();
         } else {
-            alert('Ошибка обновления');
+            const data = await response.json();
+            alert(data.error || 'Ошибка сохранения');
         }
     } catch (error) {
         alert('Ошибка сервера');
     }
-}
+});
 
 // ============ ОТОБРАЖЕНИЕ ВОПРОСОВ ============
 
@@ -744,9 +831,32 @@ function renderQuestion() {
     hintContainer.style.display = 'none';
     hintUsed = false;
     
+    const imageHtml = q.image 
+        ? `<img src="${q.image}" style="max-width: 100%; max-height: 400px; border-radius: 12px; margin: 15px 0; box-shadow: 0 4px 15px rgba(0,0,0,0.1); display: block;">` 
+        : '';
+    
+    let linkedLessonsHtml = '';
+    if (currentQuestionIndex === 0 && currentTest.linkedLessons && currentTest.linkedLessons.length > 0) {
+        linkedLessonsHtml = `
+            <div style="background: #fefcbf; border-left: 4px solid #d69e2e; padding: 18px 22px; border-radius: 12px; margin-bottom: 20px;">
+                <h4 style="margin: 0 0 12px; color: #744210; font-size: 1rem;">📖 К этому тесту есть теория:</h4>
+                ${currentTest.linkedLessons.map(l => `
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; padding: 8px 0; border-bottom: 1px dashed #d69e2e;">
+                        <span style="color: #744210; font-weight: 600;">📖 ${l.title}</span>
+                        <button onclick="openLessonFromTest('${l.id}')" class="btn-small" style="background: #d69e2e; padding: 4px 12px; font-size: 13px;">
+                            Читать →
+                        </button>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    }
+    
     let html = `
         <div class="question-item">
+            ${linkedLessonsHtml}
             <div class="question-text">${q.question}</div>
+            ${imageHtml}
             ${isInput ? `
                 <div class="input-answer-block" style="margin: 20px 0;">
                     <input type="text" id="textAnswerInput" class="text-answer-input" 
@@ -807,6 +917,21 @@ function renderQuestion() {
             hintBtn.style.display = 'none';
         }
     };
+}
+
+function openLessonFromTest(lessonId) {
+    if (currentTest) {
+        if (currentTest.timeLimit) stopTimer();
+        currentTest = null;
+    }
+    
+    showMainPage();
+    switchTab('lessons');
+    openLessonsArticles();
+    
+    setTimeout(() => {
+        openLesson(lessonId);
+    }, 200);
 }
 
 function selectOption(optionIndex) {
@@ -927,11 +1052,15 @@ function showResults(results) {
     results.results.forEach((r, index) => {
         const hintHtml = r.hint ? `<div style="font-size: 12px; color: #d69e2e; margin-top: 4px;">💡 ${r.hint}</div>` : '';
         const typeIcon = r.type === 'input' ? '✍️' : '📝';
+        const imageHtml = r.image 
+            ? `<img src="${r.image}" style="max-width: 200px; border-radius: 8px; margin: 8px 0; display: block;">` 
+            : '';
         
         html += `
             <div class="answer-detail ${r.isCorrect ? 'correct' : 'wrong'}">
                 <div style="flex: 1;">
                     <div>${typeIcon} ${index + 1}. ${r.question}</div>
+                    ${imageHtml}
                     ${hintHtml}
                 </div>
                 <div style="text-align: right; min-width: 150px;">
@@ -1043,126 +1172,6 @@ function renderLeaderboard(leaderboard) {
     leaderboardContent.innerHTML = html;
 }
 
-// ============ СОЗДАНИЕ ТЕСТА ============
-
-createForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    
-    const title = document.getElementById('testTitle').value;
-    const description = document.getElementById('testDescription').value;
-    const classNum = document.getElementById('testClass').value;
-    const category = document.getElementById('testCategory')?.value || 'Другое';
-    const timeLimit = document.getElementById('testTimeLimit')?.value || 0;
-    
-    const questionElements = document.querySelectorAll('#questionsList .question-editor');
-    const questions = [];
-    
-    questionElements.forEach(el => {
-        const type = el.querySelector('.q-type')?.value || 'choice';
-        const qText = el.querySelector('.q-text').value.trim();
-        const hint = el.querySelector('.hint-input')?.value || '';
-        
-        if (type === 'input') {
-            const correctText = el.querySelector('.correct-text')?.value.trim();
-            if (qText && correctText) {
-                questions.push({ type: 'input', question: qText, correctText, hint });
-            }
-        } else {
-            const options = [];
-            const optionInputs = el.querySelectorAll('.option-input');
-            optionInputs.forEach(input => options.push(input.value.trim()));
-            const correct = parseInt(el.querySelector('.correct-option').value);
-            
-            if (qText && options.length === 4 && options.every(o => o)) {
-                questions.push({ type: 'choice', question: qText, options, correct, hint });
-            }
-        }
-    });
-    
-    if (questions.length === 0) {
-        alert('Добавьте хотя бы один вопрос');
-        return;
-    }
-    
-    try {
-        const response = await fetch('/api/tests', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title, description, class: classNum, category, timeLimit, questions })
-        });
-        
-        if (response.ok) {
-            alert('Тест создан!');
-            createForm.reset();
-            questionsList.innerHTML = '';
-            questionCounterAdmin = 0;
-            loadTests();
-            if (currentRole === 'admin') loadStats();
-            switchTab('tests');
-        }
-    } catch (error) {
-        alert('Ошибка сервера');
-    }
-});
-
-addQuestionBtn.addEventListener('click', () => {
-    questionCounterAdmin++;
-    const html = `
-        <div class="question-editor">
-            <div class="question-number">Вопрос ${questionCounterAdmin}</div>
-            <div class="form-group">
-                <label>Тип</label>
-                <select class="q-type" style="width: 100%; padding: 8px; border: 1px solid #e2e8f0; border-radius: 6px;">
-                    <option value="choice">📝 С выбором</option>
-                    <option value="input">✍️ С вводом</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <input type="text" class="q-text" placeholder="Введите вопрос" required>
-            </div>
-            <div class="options-block">
-                <div class="options-editor">
-                    <input type="text" class="option-input" placeholder="Вариант A">
-                    <input type="text" class="option-input" placeholder="Вариант B">
-                    <input type="text" class="option-input" placeholder="Вариант C">
-                    <input type="text" class="option-input" placeholder="Вариант D">
-                </div>
-                <div class="form-group">
-                    <label>Правильный (0-3)</label>
-                    <input type="number" class="correct-option" min="0" max="3" value="0">
-                </div>
-            </div>
-            <div class="input-block" style="display: none;">
-                <div class="form-group">
-                    <label>✍️ Правильный ответ</label>
-                    <input type="text" class="correct-text" placeholder="Например: 12 или м/с">
-                </div>
-            </div>
-            <div class="form-group">
-                <label>Подсказка</label>
-                <input type="text" class="hint-input" placeholder="Подсказка">
-            </div>
-            <button type="button" class="remove-question" onclick="this.parentElement.remove()">✕ Удалить</button>
-        </div>
-    `;
-    questionsList.insertAdjacentHTML('beforeend', html);
-    
-    const lastEditor = questionsList.lastElementChild;
-    const typeSelect = lastEditor.querySelector('.q-type');
-    const optionsBlock = lastEditor.querySelector('.options-block');
-    const inputBlock = lastEditor.querySelector('.input-block');
-    
-    typeSelect.addEventListener('change', function() {
-        if (this.value === 'input') {
-            optionsBlock.style.display = 'none';
-            inputBlock.style.display = 'block';
-        } else {
-            optionsBlock.style.display = 'block';
-            inputBlock.style.display = 'none';
-        }
-    });
-});
-
 // ============ СТАТИСТИКА ============
 
 async function loadStats() {
@@ -1192,7 +1201,6 @@ function renderStats(stats) {
         `;
     }
     
-    // ✅ Список ВСЕХ пользователей с ролями
     let usersHtml = '';
     if (stats.users && stats.users.length > 0) {
         usersHtml = `
@@ -1216,13 +1224,6 @@ function renderStats(stats) {
                 }).join('')}
             </ul>
         `;
-    } else {
-        usersHtml = `
-            <h4 style="margin-top: 25px; color: #2d3748;">👥 Пользователи:</h4>
-            <p style="color: #718096; padding: 15px; background: #f7fafc; border-radius: 10px;">
-                📭 Пользователей пока нет
-            </p>
-        `;
     }
     
     statsContent.innerHTML = `
@@ -1244,6 +1245,7 @@ function renderStats(stats) {
         ${usersHtml}
     `;
 }
+
 // ============ НАВИГАЦИЯ ============
 
 document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -1263,10 +1265,13 @@ function switchTab(tab) {
     
     if (tab === 'stats') loadStats();
     if (tab === 'myresults') loadMyResults();
-    if (tab === 'tests') loadTests();
     if (tab === 'leaderboard') loadLeaderboard();
     if (tab === 'calls') loadRooms();
-    if (tab === 'lessons') loadLessons();
+    if (tab === 'lessons') {
+        backToLessonsChoice();
+        loadLessons();
+        loadTests();
+    }
 }
 
 // ============ АУТЕНТИФИКАЦИЯ ============
@@ -1293,6 +1298,7 @@ async function login() {
             currentUser = data.username;
             currentRole = data.role;
             showMainPage();
+            loadLessons();
             loadTests();
             loadMyResults();
             loadLeaderboard();
@@ -1356,1042 +1362,6 @@ async function logout() {
         showAuthPage();
     } catch (error) {
         alert('Ошибка выхода');
-    }
-}
-
-// ============ 📞 АУДИОЗВОНКИ ============
-
-const ICE_SERVERS = {
-    iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun2.l.google.com:19302' },
-        {
-            urls: 'turn:openrelay.metered.ca:80',
-            username: 'openrelayproject',
-            credential: 'openrelayproject'
-        },
-        {
-            urls: 'turn:openrelay.metered.ca:443',
-            username: 'openrelayproject',
-            credential: 'openrelayproject'
-        }
-    ]
-};
-
-// ============ ИНДИКАТОР ГОВОРЯЩЕГО ============
-
-function startSpeakingDetection(username, stream) {
-    if (audioAnalyzers[username]) return;
-    
-    try {
-        const audioContext = new AudioContext();
-        const source = audioContext.createMediaStreamSource(stream);
-        const analyser = audioContext.createAnalyser();
-        analyser.fftSize = 512;
-        analyser.smoothingTimeConstant = 0.8;
-        source.connect(analyser);
-        
-        const dataArray = new Uint8Array(analyser.frequencyBinCount);
-        let silenceCount = 0;
-        
-        const interval = setInterval(() => {
-            analyser.getByteFrequencyData(dataArray);
-            const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
-            
-            const participantEl = document.querySelector(`.participant-item[data-username="${username}"]`);
-            if (!participantEl) return;
-            
-            if (avg > 30) {
-                silenceCount = 0;
-                participantEl.classList.add('speaking');
-            } else {
-                silenceCount++;
-                if (silenceCount > 5) {
-                    participantEl.classList.remove('speaking');
-                }
-            }
-        }, 100);
-        
-        audioAnalyzers[username] = { audioContext, analyser, dataArray, interval };
-    } catch (err) {
-        console.warn('Ошибка определения говорящего:', err);
-    }
-}
-
-function stopSpeakingDetection(username) {
-    if (audioAnalyzers[username]) {
-        clearInterval(audioAnalyzers[username].interval);
-        try { audioAnalyzers[username].audioContext.close(); } catch (e) {}
-        delete audioAnalyzers[username];
-    }
-}
-
-// ============ КОМНАТЫ ============
-
-async function loadRooms() {
-    try {
-        const response = await fetch('/api/calls/rooms');
-        if (response.ok) {
-            const rooms = await response.json();
-            renderRooms(rooms);
-        }
-    } catch (error) {
-        console.error('Ошибка загрузки комнат:', error);
-    }
-}
-
-function renderRooms(rooms) {
-    if (!roomsContainer) return;
-    
-    if (!rooms || rooms.length === 0) {
-        roomsContainer.innerHTML = `
-            <div style="text-align: center; padding: 40px; color: #718096;">
-                <p>📭 Нет активных комнат</p>
-                <p style="font-size: 14px;">Создайте комнату, чтобы начать звонок</p>
-            </div>
-        `;
-        return;
-    }
-    
-    let html = '';
-    rooms.forEach(room => {
-        const canDelete = room.createdBy === currentUser || currentRole === 'admin';
-        html += `
-            <div class="test-card" style="cursor: default;">
-                <div class="test-card-header">
-                    <div>
-                        <h3>📞 ${room.name}</h3>
-                        <div class="meta">
-                            Создал: ${room.createdBy} • 
-                            ${new Date(room.createdAt).toLocaleString()}
-                        </div>
-                    </div>
-                    <div class="actions">
-                        <button class="btn-primary btn-join" data-room-id="${room.id}" data-room-name="${room.name}">
-                            🎧 Войти
-                        </button>
-                        ${canDelete ? `
-                            <button class="btn-small btn-danger btn-delete-room" data-room-id="${room.id}">
-                                🗑️
-                            </button>
-                        ` : ''}
-                    </div>
-                </div>
-            </div>
-        `;
-    });
-    
-    roomsContainer.innerHTML = html;
-    
-    roomsContainer.querySelectorAll('.btn-join').forEach(btn => {
-        btn.addEventListener('click', function() {
-            joinRoom(this.dataset.roomId, this.dataset.roomName);
-        });
-    });
-    
-    roomsContainer.querySelectorAll('.btn-delete-room').forEach(btn => {
-        btn.addEventListener('click', async function() {
-            if (!confirm('Удалить комнату?')) return;
-            try {
-                const response = await fetch(`/api/calls/rooms/${this.dataset.roomId}`, { method: 'DELETE' });
-                if (response.ok) loadRooms();
-            } catch (error) {
-                alert('Ошибка удаления');
-            }
-        });
-    });
-}
-
-createRoomBtn?.addEventListener('click', async () => {
-    const name = prompt('Название комнаты:', `Звонок ${currentUser}`);
-    if (!name) return;
-    
-    try {
-        const response = await fetch('/api/calls/rooms', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name })
-        });
-        
-        if (response.ok) {
-            const data = await response.json();
-            loadRooms();
-            setTimeout(() => joinRoom(data.room.id, data.room.name), 500);
-        }
-    } catch (error) {
-        alert('Ошибка создания комнаты');
-    }
-});
-
-async function joinRoom(roomId, roomName) {
-    try {
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            alert('Ваш браузер не поддерживает микрофон.');
-            return;
-        }
-        
-        try {
-            localStream = await navigator.mediaDevices.getUserMedia({ 
-                audio: {
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true
-                }, 
-                video: false 
-            });
-        } catch (mediaError) {
-            console.error('Ошибка доступа к микрофону:', mediaError);
-            if (mediaError.name === 'NotFoundError') {
-                alert('❌ Микрофон не найден.');
-            } else if (mediaError.name === 'NotAllowedError') {
-                alert('❌ Доступ к микрофону запрещён.');
-            } else if (mediaError.name === 'NotReadableError') {
-                alert('❌ Микрофон занят другой программой.');
-            } else {
-                alert('❌ Ошибка: ' + mediaError.message);
-            }
-            return;
-        }
-        
-        currentRoom = { id: roomId, name: roomName };
-        isCallActive = true;
-        micEnabled = true;
-        isCameraOn = false;
-        lastSignalTime = 0;
-        peerConnections = {};
-        pendingCandidates = {};
-        makingOffer = {};
-        processedSignals.clear();
-        activeParticipants.clear();
-        peerMicStatus = {};
-        isCallConnected = false;  // ✅ Сброс флага
-        pollCount = 0;             // ✅ Сброс счётчика
-        
-        callsListView.style.display = 'none';
-        callRoomView.style.display = 'flex';
-        document.body.classList.add('in-call');
-        const appEl = document.getElementById('app');
-        if (appEl) appEl.style.display = 'none';
-        
-        callRoomName.textContent = `📞 ${roomName}`;
-        callRoomStatus.textContent = 'Ожидание собеседника...';
-        
-        toggleMicBtn.disabled = false;
-        toggleMicBtn.textContent = '🎤';
-        toggleMicBtn.classList.add('active');
-        toggleMicBtn.classList.remove('muted');
-        
-        if (toggleCamBtn) {
-            toggleCamBtn.textContent = '📹';
-            toggleCamBtn.classList.remove('active');
-            toggleCamBtn.setAttribute('data-label', 'Камера');
-        }
-        
-        if (myVideoContainer) myVideoContainer.classList.remove('active');
-        
-        if (callWaiting) callWaiting.style.display = 'flex';
-        
-        updateParticipants();
-        startSpeakingDetection(currentUser, localStream);
-        await sendSignal('join', { username: currentUser });
-        startSignalPolling();
-        
-        console.log('✅ Вошли в комнату:', roomName);
-    } catch (error) {
-        console.error('Ошибка входа:', error);
-        alert('Не удалось войти в комнату: ' + error.message);
-    }
-}
-
-function leaveRoom() {
-    if (isSharingScreen) stopScreenShare();
-    if (isCameraOn) stopCamera();
-    
-    isCallActive = false;
-    
-    if (signalPollingInterval) {
-        clearInterval(signalPollingInterval);
-        signalPollingInterval = null;
-    }
-    
-    Object.values(peerConnections).forEach(pc => {
-        try { pc.close(); } catch (e) {}
-    });
-    peerConnections = {};
-    pendingCandidates = {};
-    makingOffer = {};
-    processedSignals.clear();
-    activeParticipants.clear();
-    peerMicStatus = {};
-    isCallConnected = false;  // ✅ Сброс
-    pollCount = 0;             // ✅ Сброс
-    
-    Object.keys(audioAnalyzers).forEach(username => stopSpeakingDetection(username));
-    
-    if (localStream) {
-        localStream.getTracks().forEach(track => track.stop());
-        localStream = null;
-    }
-    
-    if (currentRoom) {
-        sendSignal('leave', { username: currentUser }).catch(() => {});
-    }
-    
-    currentRoom = null;
-    if (callRoomView) callRoomView.style.display = 'none';
-    if (callsListView) callsListView.style.display = 'block';
-    const appEl = document.getElementById('app');
-    if (appEl) appEl.style.display = '';
-    if (remoteAudios) remoteAudios.innerHTML = '';
-    if (participantsList) participantsList.innerHTML = '';
-    if (screenShareContainer) screenShareContainer.classList.remove('active');
-    if (myVideoContainer) myVideoContainer.classList.remove('active');
-    
-    document.body.classList.remove('in-call');
-    
-    loadRooms();
-    console.log('📵 Вышли из комнаты');
-}
-
-leaveRoomBtn?.addEventListener('click', () => {
-    if (confirm('Выйти из комнаты?')) leaveRoom();
-});
-
-leaveRoomBtnMobile?.addEventListener('click', () => {
-    if (confirm('Выйти из комнаты?')) leaveRoom();
-});
-
-toggleMicBtn?.addEventListener('click', () => {
-    if (!localStream) return;
-    const audioTrack = localStream.getAudioTracks()[0];
-    if (audioTrack) {
-        micEnabled = !micEnabled;
-        audioTrack.enabled = micEnabled;
-        
-        toggleMicBtn.textContent = micEnabled ? '🎤' : '🔇';
-        toggleMicBtn.classList.toggle('active', micEnabled);
-        toggleMicBtn.classList.toggle('muted', !micEnabled);
-        
-        sendSignal('mic-status', { username: currentUser, enabled: micEnabled }).catch(() => {});
-        
-        updateParticipants();
-    }
-});
-
-// ============ 📹 КАМЕРА ============
-
-async function startCamera() {
-    if (!currentRoom) {
-        alert('Сначала войдите в комнату');
-        return;
-    }
-    
-    if (isCameraOn) {
-        stopCamera();
-        return;
-    }
-    
-    // ✅ Ускоряем polling на время пересогласования
-    isCallConnected = false;
-    pollCount = 0;
-    
-    try {
-        cameraStream = await navigator.mediaDevices.getUserMedia({
-            video: {
-                width: { ideal: 1280 },
-                height: { ideal: 720 },
-                facingMode: 'user'
-            },
-            audio: false
-        });
-        
-        isCameraOn = true;
-        
-        if (myVideoContainer && myVideo) {
-            myVideoContainer.classList.add('active');
-            myVideo.srcObject = cameraStream;
-            myVideo.play().catch(() => {});
-        }
-        
-        if (toggleCamBtn) {
-            toggleCamBtn.textContent = '📹';
-            toggleCamBtn.classList.add('active');
-            toggleCamBtn.setAttribute('data-label', 'Выкл. камеру');
-        }
-        
-        const videoTrack = cameraStream.getVideoTracks()[0];
-        
-        for (const peerUsername of Object.keys(peerConnections)) {
-            const pc = peerConnections[peerUsername];
-            
-            let sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
-            
-            if (sender) {
-                await sender.replaceTrack(videoTrack);
-            } else {
-                cameraSender = pc.addTrack(videoTrack, cameraStream);
-                
-                try {
-                    const offer = await pc.createOffer();
-                    await pc.setLocalDescription(offer);
-                    await sendSignal('offer', { offer: pc.localDescription, to: peerUsername });
-                } catch (err) {
-                    console.error('Ошибка пересогласования:', err);
-                }
-            }
-        }
-        
-        console.log('📹 Камера включена');
-    } catch (error) {
-        console.error('Ошибка камеры:', error);
-        if (error.name === 'NotFoundError') {
-            alert('❌ Камера не найдена. Подключите веб-камеру.');
-        } else if (error.name === 'NotAllowedError') {
-            alert('❌ Доступ к камере запрещён. Разрешите доступ в браузере.');
-        } else if (error.name === 'NotReadableError') {
-            alert('❌ Камера занята другой программой.');
-        } else {
-            alert('❌ Ошибка камеры: ' + error.message);
-        }
-    }
-}
-
-function stopCamera() {
-    if (!isCameraOn && !cameraStream) return;
-    
-    console.log('⏹️ Выключаем камеру');
-    
-    // ✅ Ускоряем polling на время пересогласования
-    isCallConnected = false;
-    pollCount = 0;
-    
-    if (cameraStream) {
-        cameraStream.getTracks().forEach(track => track.stop());
-        cameraStream = null;
-    }
-    
-    isCameraOn = false;
-    
-    if (myVideoContainer) {
-        myVideoContainer.classList.remove('active');
-        if (myVideo) myVideo.srcObject = null;
-    }
-    
-    if (toggleCamBtn) {
-        toggleCamBtn.textContent = '📹';
-        toggleCamBtn.classList.remove('active');
-        toggleCamBtn.setAttribute('data-label', 'Камера');
-    }
-    
-    for (const peerUsername of Object.keys(peerConnections)) {
-        const pc = peerConnections[peerUsername];
-        const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
-        
-        if (sender) {
-            try {
-                pc.removeTrack(sender);
-                
-                (async () => {
-                    try {
-                        const offer = await pc.createOffer();
-                        await pc.setLocalDescription(offer);
-                        await sendSignal('offer', { offer: pc.localDescription, to: peerUsername });
-                    } catch (err) {
-                        console.error('Ошибка пересогласования:', err);
-                    }
-                })();
-            } catch (err) {}
-        }
-    }
-    
-    cameraSender = null;
-}
-
-toggleCamBtn?.addEventListener('click', startCamera);
-
-// ============ 🖥️ ДЕМОНСТРАЦИЯ ЭКРАНА ============
-
-async function startScreenShare() {
-    if (!currentRoom) {
-        alert('Сначала войдите в комнату');
-        return;
-    }
-    
-    if (isSharingScreen) {
-        stopScreenShare();
-        return;
-    }
-    
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-        alert('Ваш браузер не поддерживает демонстрацию экрана.');
-        return;
-    }
-    
-    // ✅ Ускоряем polling на время пересогласования
-    isCallConnected = false;
-    pollCount = 0;
-    
-    try {
-        screenStream = await navigator.mediaDevices.getDisplayMedia({
-            video: { cursor: 'always', frameRate: { ideal: 30, max: 60 } },
-            audio: false
-        });
-        
-        isSharingScreen = true;
-        
-        if (screenShareContainer) {
-            screenShareContainer.classList.add('active');
-            const videoOnlyStream = new MediaStream([screenStream.getVideoTracks()[0]]);
-            screenShareVideo.srcObject = videoOnlyStream;
-            screenShareVideo.muted = true;
-            screenShareInfo.textContent = '📺 Вы показываете свой экран';
-            screenShareVideo.play().catch(() => {});
-            
-            if (callWaiting) callWaiting.style.display = 'none';
-        }
-        
-        if (shareScreenBtn) {
-            shareScreenBtn.textContent = '⏹️';
-            shareScreenBtn.classList.remove('primary');
-            shareScreenBtn.classList.add('danger');
-            shareScreenBtn.setAttribute('data-label', 'Остановить');
-        }
-        
-        screenStream.getVideoTracks()[0].onended = () => stopScreenShare();
-        
-        for (const peerUsername of Object.keys(peerConnections)) {
-            const pc = peerConnections[peerUsername];
-            const videoTrack = screenStream.getVideoTracks()[0];
-            
-            let sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
-            
-            if (sender) {
-                await sender.replaceTrack(videoTrack);
-            } else {
-                sender = pc.addTrack(videoTrack, screenStream);
-                screenSender = sender;
-                
-                try {
-                    const offer = await pc.createOffer();
-                    await pc.setLocalDescription(offer);
-                    await sendSignal('offer', { offer: pc.localDescription, to: peerUsername });
-                } catch (err) {
-                    console.error('Ошибка пересогласования:', err);
-                }
-            }
-        }
-        
-        console.log('🖥️ Начали трансляцию экрана');
-    } catch (error) {
-        console.error('Ошибка демонстрации:', error);
-        if (error.name !== 'NotAllowedError') {
-            alert('Ошибка демонстрации: ' + error.message);
-        }
-    }
-}
-
-function stopScreenShare() {
-    if (!isSharingScreen && !screenStream) return;
-    
-    console.log('⏹️ Останавливаем трансляцию');
-    
-    // ✅ Ускоряем polling на время пересогласования
-    isCallConnected = false;
-    pollCount = 0;
-    
-    if (screenStream) {
-        screenStream.getTracks().forEach(track => track.stop());
-        screenStream = null;
-    }
-    
-    isSharingScreen = false;
-    
-    if (screenShareContainer) {
-        screenShareContainer.classList.remove('active');
-        screenShareVideo.srcObject = null;
-        screenShareInfo.textContent = '';
-    }
-    
-    if (shareScreenBtn) {
-        shareScreenBtn.textContent = '🖥️';
-        shareScreenBtn.classList.remove('danger');
-        shareScreenBtn.classList.add('primary');
-        shareScreenBtn.setAttribute('data-label', 'Экран');
-    }
-    
-    for (const peerUsername of Object.keys(peerConnections)) {
-        const pc = peerConnections[peerUsername];
-        const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
-        
-        if (sender) {
-            try {
-                pc.removeTrack(sender);
-                
-                (async () => {
-                    try {
-                        const offer = await pc.createOffer();
-                        await pc.setLocalDescription(offer);
-                        await sendSignal('offer', { offer: pc.localDescription, to: peerUsername });
-                    } catch (err) {
-                        console.error('Ошибка пересогласования:', err);
-                    }
-                })();
-            } catch (err) {}
-        }
-    }
-    
-    screenSender = null;
-    
-    updateParticipants();
-}
-
-shareScreenBtn?.addEventListener('click', startScreenShare);
-
-// ============ PEER CONNECTION ============
-
-function createPeerConnection(peerUsername) {
-    if (peerConnections[peerUsername]) return peerConnections[peerUsername];
-    
-    const pc = new RTCPeerConnection(ICE_SERVERS);
-    peerConnections[peerUsername] = pc;
-    pendingCandidates[peerUsername] = [];
-    makingOffer[peerUsername] = false;
-    
-    if (localStream) {
-        localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-    }
-    
-    try {
-        pc.addTransceiver('video', { direction: 'sendrecv' });
-    } catch (e) {}
-    
-    pc.ontrack = (event) => {
-        const track = event.track;
-        console.log(`📺 Получен ${track.kind} трек от ${peerUsername}`);
-        
-        if (track.kind === 'audio') {
-            let audioEl = document.getElementById(`audio-${peerUsername}`);
-            if (!audioEl) {
-                audioEl = document.createElement('audio');
-                audioEl.id = `audio-${peerUsername}`;
-                audioEl.autoplay = true;
-                audioEl.playsInline = true;
-                remoteAudios.appendChild(audioEl);
-            }
-            
-            const audioOnlyStream = new MediaStream([track]);
-            audioEl.srcObject = audioOnlyStream;
-            audioEl.volume = 1.0;
-            
-            audioEl.play()
-                .then(() => {
-                    console.log(`🔊 Аудио от ${peerUsername} воспроизводится`);
-                    callRoomStatus.textContent = `🔊 Говорите с ${peerUsername}`;
-                    startSpeakingDetection(peerUsername, audioOnlyStream);
-                })
-                .catch(err => {
-                    console.error(`❌ Ошибка воспроизведения:`, err);
-                    callRoomStatus.innerHTML = `
-                        🔊 Аудио получено. 
-                        <button onclick="document.getElementById('audio-${peerUsername}').play()" 
-                                style="margin-left:10px; padding:5px 15px; background:#48bb78; color:white; border:none; border-radius:6px; cursor:pointer;">
-                            ▶️ Включить звук
-                        </button>
-                    `;
-                });
-        } else if (track.kind === 'video') {
-            screenShareVideo.dataset.fromUser = peerUsername;
-            
-            const clearVideo = () => {
-                console.log(`⏹️ ${peerUsername} выключил видео`);
-                screenShareContainer.classList.remove('active');
-                screenShareVideo.srcObject = null;
-                screenShareVideo.dataset.fromUser = '';
-                screenShareInfo.textContent = '';
-                updateParticipants();
-            };
-            
-            if (screenShareContainer) {
-                screenShareContainer.classList.add('active');
-                
-                const videoOnlyStream = new MediaStream([track]);
-                screenShareVideo.srcObject = videoOnlyStream;
-                screenShareVideo.muted = false;
-                
-                const isScreenShare = track.label && 
-                    (track.label.toLowerCase().includes('screen') || 
-                     track.label.toLowerCase().includes('display') ||
-                     track.label.toLowerCase().includes('window'));
-                
-                screenShareInfo.textContent = isScreenShare 
-                    ? `🖥️ ${peerUsername} показывает экран`
-                    : `📹 ${peerUsername}`;
-                
-                screenShareVideo.play()
-                    .then(() => console.log(`🎥 Видео от ${peerUsername} воспроизводится`))
-                    .catch(err => console.warn('Autoplay видео:', err));
-                
-                if (callWaiting) callWaiting.style.display = 'none';
-                
-                track.onended = clearVideo;
-                track.onmute = () => {
-                    console.log(`🔇 Видео от ${peerUsername} заглушено`);
-                    clearVideo();
-                };
-                track.onunmute = () => {
-                    console.log(`🔊 Видео от ${peerUsername} восстановлено`);
-                    const stream = new MediaStream([track]);
-                    screenShareVideo.srcObject = stream;
-                    screenShareContainer.classList.add('active');
-                    screenShareVideo.play().catch(() => {});
-                };
-            }
-        }
-    };
-    
-    pc.onicecandidate = (event) => {
-        if (event.candidate) {
-            sendSignal('candidate', { candidate: event.candidate, to: peerUsername });
-        }
-    };
-    
-    // ✅ Оптимизация polling после соединения
-    pc.onconnectionstatechange = () => {
-        console.log(`Соединение с ${peerUsername}: ${pc.connectionState}`);
-        
-        if (pc.connectionState === 'connected') {
-            callRoomStatus.textContent = `✅ Соединено с ${peerUsername}`;
-            if (callWaiting) callWaiting.style.display = 'none';
-            
-            // Проверяем, все ли соединения установлены
-            const allConnected = Object.values(peerConnections).every(
-                conn => conn.connectionState === 'connected'
-            );
-            
-            if (allConnected && Object.keys(peerConnections).length > 0) {
-                isCallConnected = true;
-                console.log('🐢 Все соединения установлены, замедляем polling до 5 сек');
-            }
-        } else if (pc.connectionState === 'disconnected') {
-            callRoomStatus.textContent = `⚠️ Соединение потеряно`;
-            isCallConnected = false; // Возобновляем быстрый polling
-        } else if (pc.connectionState === 'failed') {
-            callRoomStatus.textContent = `❌ Соединение не удалось`;
-            isCallConnected = false;
-            try { pc.restartIce(); } catch (e) {}
-        }
-    };
-    
-    return pc;
-}
-
-// ============ СИГНАЛИНГ (ОПТИМИЗИРОВАННЫЙ) ============
-
-async function sendSignal(type, data) {
-    if (!currentRoom) return;
-    try {
-        await fetch('/api/calls/signal', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ roomId: currentRoom.id, type, data })
-        });
-    } catch (error) {
-        console.error('Ошибка отправки сигнала:', error);
-    }
-}
-
-function startSignalPolling() {
-    if (signalPollingInterval) clearInterval(signalPollingInterval);
-    
-    pollCount = 0;
-    
-    signalPollingInterval = setInterval(async () => {
-        if (!currentRoom || !isCallActive) return;
-        
-        pollCount++;
-        
-        // ✅ Если соединение установлено — опрашиваем реже
-        if (isCallConnected) {
-            // Проверяем каждый 5-й тик = 5 секунд
-            if (pollCount % 5 !== 0) return;
-        }
-        
-        try {
-            const response = await fetch(`/api/calls/signal/${currentRoom.id}?lastTime=${lastSignalTime}`);
-            if (response.ok) {
-                const signals = await response.json();
-                for (const signal of signals) {
-                    const signalKey = signal.id || `${signal.from}_${signal.type}_${signal.createdAt}`;
-                    if (processedSignals.has(signalKey)) continue;
-                    processedSignals.add(signalKey);
-                    
-                    // Если пришёл новый сигнал — ускоряем polling
-                    if (isCallConnected) {
-                        console.log('⚡ Новый сигнал, ускоряем polling');
-                        isCallConnected = false;
-                        pollCount = 0;
-                    }
-                    
-                    await handleSignal(signal);
-                    
-                    const t = typeof signal.createdAt === 'number' 
-                        ? signal.createdAt 
-                        : new Date(signal.createdAt).getTime();
-                    if (!isNaN(t)) {
-                        lastSignalTime = Math.max(lastSignalTime, t);
-                    }
-                }
-            }
-        } catch (error) {
-            console.error('Ошибка polling:', error);
-        }
-    }, 1000);
-}
-
-async function handleSignal(signal) {
-    let data;
-    try {
-        data = JSON.parse(signal.data);
-    } catch (e) {
-        console.error('Ошибка парсинга сигнала:', e);
-        return;
-    }
-    const from = signal.from;
-    
-    console.log(`📨 Сигнал от ${from}: ${signal.type}`);
-    
-    try {
-        switch (signal.type) {
-            case 'join': await handleJoin(from); break;
-            case 'offer': await handleOffer(from, data); break;
-            case 'answer': await handleAnswer(from, data); break;
-            case 'candidate': await handleCandidate(from, data); break;
-            case 'leave': handleLeave(from); break;
-            case 'mic-status': handleMicStatus(from, data); break;
-        }
-    } catch (error) {
-        console.error(`Ошибка обработки "${signal.type}":`, error);
-    }
-}
-
-async function handleJoin(peerUsername) {
-    console.log(`👋 ${peerUsername} вошёл`);
-    
-    const wasAlreadyIn = activeParticipants.has(peerUsername);
-    activeParticipants.add(peerUsername);
-    updateParticipants();
-    
-    if (!wasAlreadyIn) {
-        sendSignal('join', { username: currentUser }).catch(() => {});
-        sendSignal('mic-status', { username: currentUser, enabled: micEnabled }).catch(() => {});
-    }
-    
-    if (peerConnections[peerUsername] && 
-        peerConnections[peerUsername].connectionState !== 'closed') {
-        console.log(`Соединение с ${peerUsername} уже существует`);
-        return;
-    }
-    
-    const shouldInitiate = currentUser < peerUsername;
-    
-    if (!shouldInitiate) {
-        console.log(`⏸️ Ждём offer от ${peerUsername}`);
-        return;
-    }
-    
-    const pc = createPeerConnection(peerUsername);
-    makingOffer[peerUsername] = true;
-    
-    try {
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        await sendSignal('offer', { offer: pc.localDescription, to: peerUsername });
-        updateParticipants();
-        callRoomStatus.textContent = `🔗 Подключение к ${peerUsername}...`;
-    } finally {
-        makingOffer[peerUsername] = false;
-    }
-}
-
-function handleMicStatus(peerUsername, data) {
-    console.log(`🎤 ${peerUsername} микрофон: ${data.enabled ? 'включён' : 'выключен'}`);
-    peerMicStatus[peerUsername] = data.enabled;
-    updateParticipants();
-}
-
-async function handleOffer(from, data) {
-    console.log(`📥 Offer от ${from}`);
-    
-    const pc = createPeerConnection(from);
-    
-    const offerCollision = makingOffer[from] || pc.signalingState !== 'stable';
-    const isPolite = currentUser > from;
-    
-    if (offerCollision && !isPolite) {
-        console.log(`⏭️ Игнорируем offer (мы инициатор)`);
-        return;
-    }
-    
-    if (offerCollision && isPolite) {
-        console.log(`🔄 Откатываем локальное состояние (collision)`);
-        try {
-            await pc.setLocalDescription({ type: 'rollback' });
-        } catch (e) {
-            console.warn('Rollback не удался:', e);
-        }
-    }
-    
-    try {
-        await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-        await flushPendingCandidates(from);
-        
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        await sendSignal('answer', { answer: pc.localDescription, to: from });
-        updateParticipants();
-    } catch (e) {
-        console.error('Ошибка в handleOffer:', e);
-    }
-}
-
-async function handleAnswer(from, data) {
-    const pc = peerConnections[from];
-    if (!pc) {
-        console.warn(`Нет pc для ${from}`);
-        return;
-    }
-    
-    if (pc.signalingState !== 'have-local-offer') {
-        console.warn(`Игнорируем answer: signalingState=${pc.signalingState}`);
-        return;
-    }
-    
-    try {
-        await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-        await flushPendingCandidates(from);
-    } catch (e) {
-        console.error('Ошибка в handleAnswer:', e);
-    }
-}
-
-async function handleCandidate(from, data) {
-    const pc = peerConnections[from];
-    if (!pc) {
-        if (!pendingCandidates[from]) pendingCandidates[from] = [];
-        pendingCandidates[from].push(data.candidate);
-        return;
-    }
-    
-    if (!pc.remoteDescription || !pc.remoteDescription.type) {
-        if (!pendingCandidates[from]) pendingCandidates[from] = [];
-        pendingCandidates[from].push(data.candidate);
-        console.log(`⏸️ Буферизован ICE от ${from} (${pendingCandidates[from].length})`);
-        return;
-    }
-    
-    try {
-        await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-        console.log(`✅ ICE от ${from} добавлен`);
-    } catch (error) {
-        console.error('Ошибка ICE:', error);
-    }
-}
-
-async function flushPendingCandidates(from) {
-    const pc = peerConnections[from];
-    if (!pc || !pendingCandidates[from]) return;
-    
-    console.log(`🔄 Применяем ${pendingCandidates[from].length} отложенных ICE от ${from}`);
-    
-    for (const candidate of pendingCandidates[from]) {
-        try {
-            await pc.addIceCandidate(new RTCIceCandidate(candidate));
-        } catch (e) {
-            console.warn('Ошибка применения ICE:', e);
-        }
-    }
-    pendingCandidates[from] = [];
-}
-
-function handleLeave(peerUsername) {
-    console.log(`👋 ${peerUsername} вышел`);
-    
-    activeParticipants.delete(peerUsername);
-    delete peerMicStatus[peerUsername];
-    
-    if (peerConnections[peerUsername]) {
-        try { peerConnections[peerUsername].close(); } catch (e) {}
-        delete peerConnections[peerUsername];
-    }
-    delete pendingCandidates[peerUsername];
-    delete makingOffer[peerUsername];
-    
-    stopSpeakingDetection(peerUsername);
-    
-    const audioEl = document.getElementById(`audio-${peerUsername}`);
-    if (audioEl) audioEl.remove();
-    
-    if (screenShareVideo && screenShareVideo.dataset.fromUser === peerUsername) {
-        screenShareContainer.classList.remove('active');
-        screenShareVideo.srcObject = null;
-        screenShareVideo.dataset.fromUser = '';
-        screenShareInfo.textContent = '';
-    }
-    
-    // Если кто-то вышел — сбрасываем флаг, polling снова быстрый
-    if (Object.keys(peerConnections).length === 0) {
-        isCallConnected = false;
-    }
-    
-    updateParticipants();
-    
-    if (Object.keys(peerConnections).length === 0 && activeParticipants.size === 0) {
-        callRoomStatus.textContent = 'Ожидание собеседника...';
-        if (callWaiting) callWaiting.style.display = 'flex';
-    }
-}
-
-function updateParticipants() {
-    if (!participantsList) return;
-    
-    const othersInRoom = new Set([
-        ...activeParticipants,
-        ...Object.keys(peerConnections)
-    ]);
-    
-    const allParticipants = [currentUser, ...othersInRoom];
-    
-    participantsList.innerHTML = allParticipants.map(p => {
-        const isMe = p === currentUser;
-        const initial = p.charAt(0).toUpperCase();
-        
-        // Реальный статус микрофона
-        const micStatus = isMe 
-            ? (micEnabled ? '🎤' : '🔇')
-            : (peerMicStatus[p] === false ? '🔇' : '🎤');
-        
-        return `
-            <div class="participant-item ${isMe ? 'is-me' : ''}" data-username="${p}">
-                <div class="participant-avatar">${initial}</div>
-                <div class="participant-name" title="${p}">${p}${isMe ? ' (вы)' : ''}</div>
-                <div class="participant-speaking"></div>
-                <div class="participant-mic ${micStatus === '🔇' ? 'muted' : ''}">${micStatus}</div>
-            </div>
-        `;
-    }).join('');
-    
-    const waiting = document.getElementById('callWaiting');
-    if (waiting) {
-        const hasAnyone = othersInRoom.size > 0;
-        const hasActiveVideo = screenShareContainer?.classList.contains('active') 
-            && screenShareVideo?.srcObject;
-        
-        if (hasAnyone || hasActiveVideo || isSharingScreen || isCameraOn) {
-            waiting.style.display = 'none';
-        } else {
-            waiting.style.display = 'flex';
-        }
     }
 }
 
@@ -2570,6 +1540,35 @@ function showLesson(lesson) {
         `;
     }
     
+    let linkedTestsHtml = '';
+    if (lesson.linkedTestIds && lesson.linkedTestIds.length > 0) {
+        const linkedTests = lesson.linkedTestIds
+            .map(id => tests.find(t => t.id === id))
+            .filter(t => t);
+        
+        if (linkedTests.length > 0) {
+            linkedTestsHtml = `
+                <div style="margin-top: 40px; padding-top: 25px; border-top: 2px solid #e2e8f0;">
+                    <h3 style="color: #2d3748; margin-bottom: 15px;">📝 Тесты по этой теме:</h3>
+                    ${linkedTests.map(t => `
+                        <div style="background: #ebf4ff; border-left: 4px solid #4299e1; padding: 18px 22px; border-radius: 12px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+                            <div>
+                                <h4 style="margin: 0 0 5px; color: #2b6cb0;">🎯 ${t.title}</h4>
+                                <div style="font-size: 14px; color: #4a5568;">
+                                    ${t.questions?.length || 0} вопросов
+                                    ${t.timeLimit ? ` • ⏱️ ${t.timeLimit} мин` : ''}
+                                </div>
+                            </div>
+                            <button onclick="startTestFromLesson('${t.id}')" class="btn-primary" style="background: #4299e1;">
+                                Пройти тест →
+                            </button>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+    }
+    
     lessonContent.innerHTML = `
         <div style="background: white; padding: 40px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.08);">
             <div style="border-bottom: 3px solid #e2e8f0; padding-bottom: 20px; margin-bottom: 30px;">
@@ -2588,26 +1587,19 @@ function showLesson(lesson) {
             
             ${formulasHtml}
             ${examplesHtml}
-            
-            <div style="margin-top: 40px; padding-top: 25px; border-top: 2px solid #e2e8f0; text-align: center;">
-                <button onclick="goToTestsByCategory('${lesson.category || 'Другое'}')" class="btn-primary" style="background: linear-gradient(135deg, #48bb78 0%, #38a169 100%); font-size: 16px; padding: 14px 30px;">
-                    🎯 Пройти тесты по теме "${lesson.category || 'Другое'}"
-                </button>
-            </div>
+            ${linkedTestsHtml}
         </div>
     `;
     
     window.scrollTo(0, 0);
 }
 
-function goToTestsByCategory(category) {
-    switchTab('tests');
+function startTestFromLesson(testId) {
+    switchTab('lessons');
+    openLessonsTests();
     setTimeout(() => {
-        if (categoryFilter) {
-            categoryFilter.value = category;
-            renderTests();
-        }
-    }, 100);
+        startTest(testId);
+    }, 200);
 }
 
 function editLesson(id) {
@@ -2626,6 +1618,8 @@ function editLesson(id) {
     document.getElementById('lessonFormulas').value = (lesson.formulas || []).join('\n');
     document.getElementById('lessonExamples').value = (lesson.examples || []).join('\n');
     
+    renderLessonLinkedTests(lesson.linkedTestIds || []);
+    
     window.scrollTo(0, 0);
 }
 
@@ -2638,6 +1632,8 @@ function showLessonEditor() {
     lessonForm.reset();
     document.getElementById('lessonId').value = '';
     
+    renderLessonLinkedTests([]);
+    
     window.scrollTo(0, 0);
 }
 
@@ -2648,7 +1644,6 @@ function backToLessonsList() {
     loadLessons();
 }
 
-// Обработчики обучения
 createLessonBtn?.addEventListener('click', showLessonEditor);
 backToLessonsBtn?.addEventListener('click', backToLessonsList);
 backFromEditorBtn?.addEventListener('click', backToLessonsList);
@@ -2674,6 +1669,9 @@ lessonForm?.addEventListener('submit', async (e) => {
         return;
     }
     
+    const linkedTestIds = [...document.querySelectorAll('#lessonLinkedTests input:checked')]
+        .map(cb => cb.value);
+    
     try {
         const url = id ? `/api/lessons/${id}` : '/api/lessons';
         const method = id ? 'PUT' : 'POST';
@@ -2681,7 +1679,7 @@ lessonForm?.addEventListener('submit', async (e) => {
         const response = await fetch(url, {
             method,
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title, category, content, formulas, examples })
+            body: JSON.stringify({ title, category, content, formulas, examples, linkedTestIds })
         });
         
         if (response.ok) {
@@ -2697,6 +1695,868 @@ lessonForm?.addEventListener('submit', async (e) => {
     }
 });
 
+// ============ 📞 АУДИОЗВОНКИ ============
+
+const ICE_SERVERS = {
+    iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        {
+            urls: 'turn:openrelay.metered.ca:80',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+        },
+        {
+            urls: 'turn:openrelay.metered.ca:443',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+        }
+    ]
+};
+
+function startSpeakingDetection(username, stream) {
+    if (audioAnalyzers[username]) return;
+    
+    try {
+        const audioContext = new AudioContext();
+        const source = audioContext.createMediaStreamSource(stream);
+        const analyser = audioContext.createAnalyser();
+        analyser.fftSize = 512;
+        analyser.smoothingTimeConstant = 0.8;
+        source.connect(analyser);
+        
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        let silenceCount = 0;
+        
+        const interval = setInterval(() => {
+            analyser.getByteFrequencyData(dataArray);
+            const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+            
+            const participantEl = document.querySelector(`.participant-item[data-username="${username}"]`);
+            if (!participantEl) return;
+            
+            if (avg > 30) {
+                silenceCount = 0;
+                participantEl.classList.add('speaking');
+            } else {
+                silenceCount++;
+                if (silenceCount > 5) {
+                    participantEl.classList.remove('speaking');
+                }
+            }
+        }, 100);
+        
+        audioAnalyzers[username] = { audioContext, analyser, dataArray, interval };
+    } catch (err) {
+        console.warn('Ошибка определения говорящего:', err);
+    }
+}
+
+function stopSpeakingDetection(username) {
+    if (audioAnalyzers[username]) {
+        clearInterval(audioAnalyzers[username].interval);
+        try { audioAnalyzers[username].audioContext.close(); } catch (e) {}
+        delete audioAnalyzers[username];
+    }
+}
+
+async function loadRooms() {
+    try {
+        const response = await fetch('/api/calls/rooms');
+        if (response.ok) {
+            const rooms = await response.json();
+            renderRooms(rooms);
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки комнат:', error);
+    }
+}
+
+function renderRooms(rooms) {
+    if (!roomsContainer) return;
+    
+    if (!rooms || rooms.length === 0) {
+        roomsContainer.innerHTML = `
+            <div style="text-align: center; padding: 40px; color: #718096;">
+                <p>📭 Нет активных комнат</p>
+                <p style="font-size: 14px;">Создайте комнату, чтобы начать звонок</p>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = '';
+    rooms.forEach(room => {
+        const canDelete = room.createdBy === currentUser || currentRole === 'admin';
+        html += `
+            <div class="test-card" style="cursor: default;">
+                <div class="test-card-header">
+                    <div>
+                        <h3>📞 ${room.name}</h3>
+                        <div class="meta">
+                            Создал: ${room.createdBy} • 
+                            ${new Date(room.createdAt).toLocaleString()}
+                        </div>
+                    </div>
+                    <div class="actions">
+                        <button class="btn-primary btn-join" data-room-id="${room.id}" data-room-name="${room.name}">
+                            🎧 Войти
+                        </button>
+                        ${canDelete ? `
+                            <button class="btn-small btn-danger btn-delete-room" data-room-id="${room.id}">
+                                🗑️
+                            </button>
+                        ` : ''}
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    roomsContainer.innerHTML = html;
+    
+    roomsContainer.querySelectorAll('.btn-join').forEach(btn => {
+        btn.addEventListener('click', function() {
+            joinRoom(this.dataset.roomId, this.dataset.roomName);
+        });
+    });
+    
+    roomsContainer.querySelectorAll('.btn-delete-room').forEach(btn => {
+        btn.addEventListener('click', async function() {
+            if (!confirm('Удалить комнату?')) return;
+            try {
+                const response = await fetch(`/api/calls/rooms/${this.dataset.roomId}`, { method: 'DELETE' });
+                if (response.ok) loadRooms();
+            } catch (error) {
+                alert('Ошибка удаления');
+            }
+        });
+    });
+}
+
+createRoomBtn?.addEventListener('click', async () => {
+    const name = prompt('Название комнаты:', `Звонок ${currentUser}`);
+    if (!name) return;
+    
+    try {
+        const response = await fetch('/api/calls/rooms', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name })
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            loadRooms();
+            setTimeout(() => joinRoom(data.room.id, data.room.name), 500);
+        }
+    } catch (error) {
+        alert('Ошибка создания комнаты');
+    }
+});
+
+async function joinRoom(roomId, roomName) {
+    try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            alert('Ваш браузер не поддерживает микрофон.');
+            return;
+        }
+        
+        try {
+            localStream = await navigator.mediaDevices.getUserMedia({ 
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                }, 
+                video: false 
+            });
+        } catch (mediaError) {
+            console.error('Ошибка доступа к микрофону:', mediaError);
+            if (mediaError.name === 'NotFoundError') {
+                alert('❌ Микрофон не найден.');
+            } else if (mediaError.name === 'NotAllowedError') {
+                alert('❌ Доступ к микрофону запрещён.');
+            } else if (mediaError.name === 'NotReadableError') {
+                alert('❌ Микрофон занят другой программой.');
+            } else {
+                alert('❌ Ошибка: ' + mediaError.message);
+            }
+            return;
+        }
+        
+        currentRoom = { id: roomId, name: roomName };
+        isCallActive = true;
+        micEnabled = true;
+        isCameraOn = false;
+        lastSignalTime = 0;
+        peerConnections = {};
+        pendingCandidates = {};
+        makingOffer = {};
+        processedSignals.clear();
+        activeParticipants.clear();
+        peerMicStatus = {};
+        isCallConnected = false;
+        pollCount = 0;
+        
+        callsListView.style.display = 'none';
+        callRoomView.style.display = 'flex';
+        document.body.classList.add('in-call');
+        const appEl = document.getElementById('app');
+        if (appEl) appEl.style.display = 'none';
+        
+        callRoomName.textContent = `📞 ${roomName}`;
+        callRoomStatus.textContent = 'Ожидание собеседника...';
+        
+        toggleMicBtn.disabled = false;
+        toggleMicBtn.textContent = '🎤';
+        toggleMicBtn.classList.add('active');
+        toggleMicBtn.classList.remove('muted');
+        
+        if (toggleCamBtn) {
+            toggleCamBtn.textContent = '📹';
+            toggleCamBtn.classList.remove('active');
+            toggleCamBtn.setAttribute('data-label', 'Камера');
+        }
+        
+        if (myVideoContainer) myVideoContainer.classList.remove('active');
+        
+        if (callWaiting) callWaiting.style.display = 'flex';
+        
+        updateParticipants();
+        startSpeakingDetection(currentUser, localStream);
+        await sendSignal('join', { username: currentUser });
+        startSignalPolling();
+        
+        console.log('✅ Вошли в комнату:', roomName);
+    } catch (error) {
+        console.error('Ошибка входа:', error);
+        alert('Не удалось войти в комнату: ' + error.message);
+    }
+}
+
+function leaveRoom() {
+    if (isSharingScreen) stopScreenShare();
+    if (isCameraOn) stopCamera();
+    
+    isCallActive = false;
+    
+    if (signalPollingInterval) {
+        clearInterval(signalPollingInterval);
+        signalPollingInterval = null;
+    }
+    
+    Object.values(peerConnections).forEach(pc => {
+        try { pc.close(); } catch (e) {}
+    });
+    peerConnections = {};
+    pendingCandidates = {};
+    makingOffer = {};
+    processedSignals.clear();
+    activeParticipants.clear();
+    peerMicStatus = {};
+    isCallConnected = false;
+    pollCount = 0;
+    
+    Object.keys(audioAnalyzers).forEach(username => stopSpeakingDetection(username));
+    
+    if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+        localStream = null;
+    }
+    
+    if (currentRoom) {
+        sendSignal('leave', { username: currentUser }).catch(() => {});
+    }
+    
+    currentRoom = null;
+    if (callRoomView) callRoomView.style.display = 'none';
+    if (callsListView) callsListView.style.display = 'block';
+    const appEl = document.getElementById('app');
+    if (appEl) appEl.style.display = '';
+    if (remoteAudios) remoteAudios.innerHTML = '';
+    if (participantsList) participantsList.innerHTML = '';
+    if (screenShareContainer) screenShareContainer.classList.remove('active');
+    if (myVideoContainer) myVideoContainer.classList.remove('active');
+    
+    document.body.classList.remove('in-call');
+    
+    loadRooms();
+}
+
+leaveRoomBtn?.addEventListener('click', () => {
+    if (confirm('Выйти из комнаты?')) leaveRoom();
+});
+
+leaveRoomBtnMobile?.addEventListener('click', () => {
+    if (confirm('Выйти из комнаты?')) leaveRoom();
+});
+
+toggleMicBtn?.addEventListener('click', () => {
+    if (!localStream) return;
+    const audioTrack = localStream.getAudioTracks()[0];
+    if (audioTrack) {
+        micEnabled = !micEnabled;
+        audioTrack.enabled = micEnabled;
+        
+        toggleMicBtn.textContent = micEnabled ? '🎤' : '🔇';
+        toggleMicBtn.classList.toggle('active', micEnabled);
+        toggleMicBtn.classList.toggle('muted', !micEnabled);
+        
+        sendSignal('mic-status', { username: currentUser, enabled: micEnabled }).catch(() => {});
+        
+        updateParticipants();
+    }
+});
+
+async function startCamera() {
+    if (!currentRoom) { alert('Сначала войдите в комнату'); return; }
+    if (isCameraOn) { stopCamera(); return; }
+    
+    isCallConnected = false;
+    pollCount = 0;
+    
+    try {
+        cameraStream = await navigator.mediaDevices.getUserMedia({
+            video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
+            audio: false
+        });
+        
+        isCameraOn = true;
+        
+        if (myVideoContainer && myVideo) {
+            myVideoContainer.classList.add('active');
+            myVideo.srcObject = cameraStream;
+            myVideo.play().catch(() => {});
+        }
+        
+        if (toggleCamBtn) {
+            toggleCamBtn.classList.add('active');
+            toggleCamBtn.setAttribute('data-label', 'Выкл. камеру');
+        }
+        
+        const videoTrack = cameraStream.getVideoTracks()[0];
+        
+        for (const peerUsername of Object.keys(peerConnections)) {
+            const pc = peerConnections[peerUsername];
+            let sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+            
+            if (sender) {
+                await sender.replaceTrack(videoTrack);
+            } else {
+                cameraSender = pc.addTrack(videoTrack, cameraStream);
+                try {
+                    const offer = await pc.createOffer();
+                    await pc.setLocalDescription(offer);
+                    await sendSignal('offer', { offer: pc.localDescription, to: peerUsername });
+                } catch (err) { console.error(err); }
+            }
+        }
+    } catch (error) {
+        console.error('Ошибка камеры:', error);
+        if (error.name === 'NotFoundError') alert('❌ Камера не найдена.');
+        else if (error.name === 'NotAllowedError') alert('❌ Доступ к камере запрещён.');
+        else alert('❌ Ошибка камеры: ' + error.message);
+    }
+}
+
+function stopCamera() {
+    if (!isCameraOn && !cameraStream) return;
+    
+    isCallConnected = false;
+    pollCount = 0;
+    
+    if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+        cameraStream = null;
+    }
+    
+    isCameraOn = false;
+    
+    if (myVideoContainer) {
+        myVideoContainer.classList.remove('active');
+        if (myVideo) myVideo.srcObject = null;
+    }
+    
+    if (toggleCamBtn) {
+        toggleCamBtn.classList.remove('active');
+        toggleCamBtn.setAttribute('data-label', 'Камера');
+    }
+    
+    for (const peerUsername of Object.keys(peerConnections)) {
+        const pc = peerConnections[peerUsername];
+        const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+        if (sender) {
+            try {
+                pc.removeTrack(sender);
+                (async () => {
+                    try {
+                        const offer = await pc.createOffer();
+                        await pc.setLocalDescription(offer);
+                        await sendSignal('offer', { offer: pc.localDescription, to: peerUsername });
+                    } catch (err) {}
+                })();
+            } catch (err) {}
+        }
+    }
+    
+    cameraSender = null;
+}
+
+toggleCamBtn?.addEventListener('click', startCamera);
+
+async function startScreenShare() {
+    if (!currentRoom) { alert('Сначала войдите в комнату'); return; }
+    if (isSharingScreen) { stopScreenShare(); return; }
+    if (!navigator.mediaDevices?.getDisplayMedia) { alert('Браузер не поддерживает демонстрацию.'); return; }
+    
+    isCallConnected = false;
+    pollCount = 0;
+    
+    try {
+        screenStream = await navigator.mediaDevices.getDisplayMedia({
+            video: { cursor: 'always', frameRate: { ideal: 30, max: 60 } },
+            audio: false
+        });
+        
+        isSharingScreen = true;
+        
+        if (screenShareContainer) {
+            screenShareContainer.classList.add('active');
+            screenShareVideo.srcObject = new MediaStream([screenStream.getVideoTracks()[0]]);
+            screenShareVideo.muted = true;
+            screenShareInfo.textContent = '📺 Вы показываете свой экран';
+            screenShareVideo.play().catch(() => {});
+            if (callWaiting) callWaiting.style.display = 'none';
+        }
+        
+        if (shareScreenBtn) {
+            shareScreenBtn.textContent = '⏹️';
+            shareScreenBtn.classList.remove('primary');
+            shareScreenBtn.classList.add('danger');
+            shareScreenBtn.setAttribute('data-label', 'Остановить');
+        }
+        
+        screenStream.getVideoTracks()[0].onended = () => stopScreenShare();
+        
+        for (const peerUsername of Object.keys(peerConnections)) {
+            const pc = peerConnections[peerUsername];
+            const videoTrack = screenStream.getVideoTracks()[0];
+            let sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+            
+            if (sender) {
+                await sender.replaceTrack(videoTrack);
+            } else {
+                sender = pc.addTrack(videoTrack, screenStream);
+                screenSender = sender;
+                try {
+                    const offer = await pc.createOffer();
+                    await pc.setLocalDescription(offer);
+                    await sendSignal('offer', { offer: pc.localDescription, to: peerUsername });
+                } catch (err) {}
+            }
+        }
+    } catch (error) {
+        console.error('Ошибка демонстрации:', error);
+        if (error.name !== 'NotAllowedError') alert('Ошибка демонстрации: ' + error.message);
+    }
+}
+
+function stopScreenShare() {
+    if (!isSharingScreen && !screenStream) return;
+    
+    isCallConnected = false;
+    pollCount = 0;
+    
+    if (screenStream) {
+        screenStream.getTracks().forEach(track => track.stop());
+        screenStream = null;
+    }
+    
+    isSharingScreen = false;
+    
+    if (screenShareContainer) {
+        screenShareContainer.classList.remove('active');
+        screenShareVideo.srcObject = null;
+        screenShareInfo.textContent = '';
+    }
+    
+    if (shareScreenBtn) {
+        shareScreenBtn.textContent = '🖥️';
+        shareScreenBtn.classList.remove('danger');
+        shareScreenBtn.classList.add('primary');
+        shareScreenBtn.setAttribute('data-label', 'Экран');
+    }
+    
+    for (const peerUsername of Object.keys(peerConnections)) {
+        const pc = peerConnections[peerUsername];
+        const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+        if (sender) {
+            try {
+                pc.removeTrack(sender);
+                (async () => {
+                    try {
+                        const offer = await pc.createOffer();
+                        await pc.setLocalDescription(offer);
+                        await sendSignal('offer', { offer: pc.localDescription, to: peerUsername });
+                    } catch (err) {}
+                })();
+            } catch (err) {}
+        }
+    }
+    
+    screenSender = null;
+    updateParticipants();
+}
+
+shareScreenBtn?.addEventListener('click', startScreenShare);
+
+function createPeerConnection(peerUsername) {
+    if (peerConnections[peerUsername]) return peerConnections[peerUsername];
+    
+    const pc = new RTCPeerConnection(ICE_SERVERS);
+    peerConnections[peerUsername] = pc;
+    pendingCandidates[peerUsername] = [];
+    makingOffer[peerUsername] = false;
+    
+    if (localStream) {
+        localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+    }
+    
+    pc.ontrack = (event) => {
+        const track = event.track;
+        
+        if (track.kind === 'audio') {
+            let audioEl = document.getElementById(`audio-${peerUsername}`);
+            if (!audioEl) {
+                audioEl = document.createElement('audio');
+                audioEl.id = `audio-${peerUsername}`;
+                audioEl.autoplay = true;
+                audioEl.playsInline = true;
+                remoteAudios.appendChild(audioEl);
+            }
+            
+            const audioOnlyStream = new MediaStream([track]);
+            audioEl.srcObject = audioOnlyStream;
+            audioEl.volume = 1.0;
+            
+            audioEl.play()
+                .then(() => {
+                    callRoomStatus.textContent = `🔊 Говорите с ${peerUsername}`;
+                    startSpeakingDetection(peerUsername, audioOnlyStream);
+                })
+                .catch(err => console.error(err));
+        } else if (track.kind === 'video') {
+            screenShareVideo.dataset.fromUser = peerUsername;
+            
+            const clearVideo = () => {
+                screenShareContainer.classList.remove('active');
+                screenShareVideo.srcObject = null;
+                screenShareVideo.dataset.fromUser = '';
+                screenShareInfo.textContent = '';
+                updateParticipants();
+            };
+            
+            if (screenShareContainer) {
+                screenShareContainer.classList.add('active');
+                screenShareVideo.srcObject = new MediaStream([track]);
+                screenShareVideo.muted = false;
+                
+                const isScreenShare = track.label && (
+                    track.label.toLowerCase().includes('screen') || 
+                    track.label.toLowerCase().includes('display') ||
+                    track.label.toLowerCase().includes('window')
+                );
+                
+                screenShareInfo.textContent = isScreenShare 
+                    ? `🖥️ ${peerUsername} показывает экран`
+                    : `📹 ${peerUsername}`;
+                
+                setTimeout(() => {
+                    screenShareVideo.play().catch(err => {
+                        if (err.name !== 'AbortError') console.warn(err);
+                    });
+                }, 100);
+                
+                if (callWaiting) callWaiting.style.display = 'none';
+                
+                track.onended = clearVideo;
+                track.onmute = clearVideo;
+                track.onunmute = () => {
+                    screenShareVideo.srcObject = new MediaStream([track]);
+                    screenShareContainer.classList.add('active');
+                    screenShareVideo.play().catch(() => {});
+                };
+            }
+        }
+    };
+    
+    pc.onicecandidate = (event) => {
+        if (event.candidate) {
+            sendSignal('candidate', { candidate: event.candidate, to: peerUsername });
+        }
+    };
+    
+    pc.onconnectionstatechange = () => {
+        if (pc.connectionState === 'connected') {
+            callRoomStatus.textContent = `✅ Соединено с ${peerUsername}`;
+            if (callWaiting) callWaiting.style.display = 'none';
+            
+            const allConnected = Object.values(peerConnections).every(c => c.connectionState === 'connected');
+            if (allConnected && Object.keys(peerConnections).length > 0) {
+                isCallConnected = true;
+            }
+        } else if (pc.connectionState === 'disconnected') {
+            callRoomStatus.textContent = `⚠️ Соединение потеряно`;
+            isCallConnected = false;
+        } else if (pc.connectionState === 'failed') {
+            callRoomStatus.textContent = `❌ Соединение не удалось`;
+            isCallConnected = false;
+            try { pc.restartIce(); } catch (e) {}
+        }
+    };
+    
+    return pc;
+}
+
+async function sendSignal(type, data) {
+    if (!currentRoom) return;
+    try {
+        await fetch('/api/calls/signal', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ roomId: currentRoom.id, type, data })
+        });
+    } catch (error) {
+        console.error('Ошибка отправки сигнала:', error);
+    }
+}
+
+function startSignalPolling() {
+    if (signalPollingInterval) clearInterval(signalPollingInterval);
+    pollCount = 0;
+    
+    signalPollingInterval = setInterval(async () => {
+        if (!currentRoom || !isCallActive) return;
+        pollCount++;
+        
+        if (isCallConnected && pollCount % 5 !== 0) return;
+        
+        try {
+            const response = await fetch(`/api/calls/signal/${currentRoom.id}?lastTime=${lastSignalTime}`);
+            if (response.ok) {
+                const signals = await response.json();
+                for (const signal of signals) {
+                    const signalKey = signal.id || `${signal.from}_${signal.type}_${signal.createdAt}`;
+                    if (processedSignals.has(signalKey)) continue;
+                    processedSignals.add(signalKey);
+                    
+                    if (isCallConnected) {
+                        isCallConnected = false;
+                        pollCount = 0;
+                    }
+                    
+                    await handleSignal(signal);
+                    
+                    const t = typeof signal.createdAt === 'number' 
+                        ? signal.createdAt 
+                        : new Date(signal.createdAt).getTime();
+                    if (!isNaN(t)) lastSignalTime = Math.max(lastSignalTime, t);
+                }
+            }
+        } catch (error) {
+            console.error('Ошибка polling:', error);
+        }
+    }, 1000);
+}
+
+async function handleSignal(signal) {
+    let data;
+    try {
+        data = JSON.parse(signal.data);
+    } catch (e) { return; }
+    const from = signal.from;
+    
+    try {
+        switch (signal.type) {
+            case 'join': await handleJoin(from); break;
+            case 'offer': await handleOffer(from, data); break;
+            case 'answer': await handleAnswer(from, data); break;
+            case 'candidate': await handleCandidate(from, data); break;
+            case 'leave': handleLeave(from); break;
+            case 'mic-status': handleMicStatus(from, data); break;
+        }
+    } catch (error) {
+        console.error(`Ошибка обработки "${signal.type}":`, error);
+    }
+}
+
+async function handleJoin(peerUsername) {
+    const wasAlreadyIn = activeParticipants.has(peerUsername);
+    activeParticipants.add(peerUsername);
+    updateParticipants();
+    
+    if (!wasAlreadyIn && currentUser < peerUsername) {
+        sendSignal('join', { username: currentUser }).catch(() => {});
+    }
+    
+    if (!wasAlreadyIn) {
+        sendSignal('mic-status', { username: currentUser, enabled: micEnabled }).catch(() => {});
+    }
+    
+    if (peerConnections[peerUsername] && peerConnections[peerUsername].connectionState !== 'closed') return;
+    
+    const shouldInitiate = currentUser < peerUsername;
+    if (!shouldInitiate) return;
+    
+    const pc = createPeerConnection(peerUsername);
+    makingOffer[peerUsername] = true;
+    
+    try {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        await sendSignal('offer', { offer: pc.localDescription, to: peerUsername });
+        updateParticipants();
+    } finally {
+        makingOffer[peerUsername] = false;
+    }
+}
+
+function handleMicStatus(peerUsername, data) {
+    peerMicStatus[peerUsername] = data.enabled;
+    updateParticipants();
+}
+
+async function handleOffer(from, data) {
+    const pc = createPeerConnection(from);
+    const offerCollision = makingOffer[from] || pc.signalingState !== 'stable';
+    const isPolite = currentUser > from;
+    
+    if (offerCollision && !isPolite) return;
+    
+    if (offerCollision && isPolite) {
+        try { await pc.setLocalDescription({ type: 'rollback' }); } catch (e) {}
+    }
+    
+    try {
+        await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+        await flushPendingCandidates(from);
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        await sendSignal('answer', { answer: pc.localDescription, to: from });
+        updateParticipants();
+    } catch (e) { console.error(e); }
+}
+
+async function handleAnswer(from, data) {
+    const pc = peerConnections[from];
+    if (!pc || pc.signalingState !== 'have-local-offer') return;
+    
+    try {
+        await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+        await flushPendingCandidates(from);
+    } catch (e) { console.error(e); }
+}
+
+async function handleCandidate(from, data) {
+    const pc = peerConnections[from];
+    if (!pc) {
+        if (!pendingCandidates[from]) pendingCandidates[from] = [];
+        pendingCandidates[from].push(data.candidate);
+        return;
+    }
+    
+    if (!pc.remoteDescription || !pc.remoteDescription.type) {
+        if (!pendingCandidates[from]) pendingCandidates[from] = [];
+        pendingCandidates[from].push(data.candidate);
+        return;
+    }
+    
+    try {
+        await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+    } catch (error) {}
+}
+
+async function flushPendingCandidates(from) {
+    const pc = peerConnections[from];
+    if (!pc || !pendingCandidates[from]) return;
+    
+    for (const candidate of pendingCandidates[from]) {
+        try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch (e) {}
+    }
+    pendingCandidates[from] = [];
+}
+
+function handleLeave(peerUsername) {
+    activeParticipants.delete(peerUsername);
+    delete peerMicStatus[peerUsername];
+    
+    if (peerConnections[peerUsername]) {
+        try { peerConnections[peerUsername].close(); } catch (e) {}
+        delete peerConnections[peerUsername];
+    }
+    delete pendingCandidates[peerUsername];
+    delete makingOffer[peerUsername];
+    
+    stopSpeakingDetection(peerUsername);
+    
+    const audioEl = document.getElementById(`audio-${peerUsername}`);
+    if (audioEl) audioEl.remove();
+    
+    if (screenShareVideo && screenShareVideo.dataset.fromUser === peerUsername) {
+        screenShareContainer.classList.remove('active');
+        screenShareVideo.srcObject = null;
+        screenShareVideo.dataset.fromUser = '';
+        screenShareInfo.textContent = '';
+    }
+    
+    if (Object.keys(peerConnections).length === 0) isCallConnected = false;
+    
+    updateParticipants();
+    
+    if (Object.keys(peerConnections).length === 0 && activeParticipants.size === 0) {
+        callRoomStatus.textContent = 'Ожидание собеседника...';
+        if (callWaiting) callWaiting.style.display = 'flex';
+    }
+}
+
+function updateParticipants() {
+    if (!participantsList) return;
+    
+    const othersInRoom = new Set([...activeParticipants, ...Object.keys(peerConnections)]);
+    const allParticipants = [currentUser, ...othersInRoom];
+    
+    participantsList.innerHTML = allParticipants.map(p => {
+        const isMe = p === currentUser;
+        const initial = p.charAt(0).toUpperCase();
+        const micStatus = isMe 
+            ? (micEnabled ? '🎤' : '🔇')
+            : (peerMicStatus[p] === false ? '🔇' : '🎤');
+        
+        return `
+            <div class="participant-item ${isMe ? 'is-me' : ''}" data-username="${p}">
+                <div class="participant-avatar">${initial}</div>
+                <div class="participant-name" title="${p}">${p}${isMe ? ' (вы)' : ''}</div>
+                <div class="participant-speaking"></div>
+                <div class="participant-mic ${micStatus === '🔇' ? 'muted' : ''}">${micStatus}</div>
+            </div>
+        `;
+    }).join('');
+    
+    const waiting = document.getElementById('callWaiting');
+    if (waiting) {
+        const hasAnyone = othersInRoom.size > 0;
+        const hasActiveVideo = screenShareContainer?.classList.contains('active') && screenShareVideo?.srcObject;
+        
+        if (hasAnyone || hasActiveVideo || isSharingScreen || isCameraOn) {
+            waiting.style.display = 'none';
+        } else {
+            waiting.style.display = 'flex';
+        }
+    }
+}
+
 // ============ СОБЫТИЯ ============
 
 loginBtn.addEventListener('click', login);
@@ -2705,15 +2565,19 @@ logoutBtn.addEventListener('click', logout);
 prevBtn.addEventListener('click', prevQuestion);
 nextBtn.addEventListener('click', nextQuestion);
 submitBtn.addEventListener('click', () => submitTest(false));
+
 backBtn.addEventListener('click', () => {
     stopTimer();
     showMainPage();
-    loadTests();
+    switchTab('lessons');
+    openLessonsTests();
 });
+
 backToTestsBtn.addEventListener('click', () => {
     stopTimer();
     showMainPage();
-    loadTests();
+    switchTab('lessons');
+    openLessonsTests();
 });
 
 if (categoryFilter) categoryFilter.addEventListener('change', renderTests);

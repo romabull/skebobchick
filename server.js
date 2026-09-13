@@ -349,7 +349,7 @@ app.post('/api/tests', async (req, res) => {
         const decoded = jwt.verify(token, JWT_SECRET);
         if (decoded.role !== 'admin') return res.status(403).json({ error: 'Доступ только для администратора' });
         
-        const { title, description, class: classNum, category, timeLimit, questions } = req.body;
+        const { title, description, class: classNum, category, timeLimit, questions, linkedLessonIds } = req.body;
         if (!title || !questions || !Array.isArray(questions) || questions.length === 0) {
             return res.status(400).json({ error: 'Некорректные данные' });
         }
@@ -367,8 +367,10 @@ app.post('/api/tests', async (req, res) => {
                 options: q.type === 'input' ? [] : q.options,
                 correct: q.type === 'input' ? q.correctText : parseInt(q.correct),
                 correctText: q.type === 'input' ? q.correctText : '',
-                hint: q.hint || ''
+                hint: q.hint || '',
+                image: q.image || null
             })),
+            linkedLessonIds: Array.isArray(linkedLessonIds) ? linkedLessonIds : [],
             createdBy: decoded.username
         };
         
@@ -391,7 +393,7 @@ app.put('/api/tests/:id', async (req, res) => {
         if (decoded.role !== 'admin') return res.status(403).json({ error: 'Доступ только для администратора' });
         
         const testId = req.params.id;
-        const { title, description, class: classNum, category, timeLimit, questions } = req.body;
+        const { title, description, class: classNum, category, timeLimit, questions, linkedLessonIds } = req.body;
         
         const existingTest = await getTest(testId);
         if (!existingTest) return res.status(404).json({ error: 'Тест не найден' });
@@ -413,8 +415,10 @@ app.put('/api/tests/:id', async (req, res) => {
                 options: q.type === 'input' ? [] : q.options,
                 correct: q.type === 'input' ? q.correctText : parseInt(q.correct),
                 correctText: q.type === 'input' ? q.correctText : '',
-                hint: q.hint || ''
+                hint: q.hint || '',
+                image: q.image || null
             })),
+            linkedLessonIds: Array.isArray(linkedLessonIds) ? linkedLessonIds : [],
             createdBy: existingTest.createdBy || decoded.username,
             updatedAt: new Date()
         };
@@ -489,6 +493,7 @@ app.post('/api/tests/:id/check', async (req, res) => {
                 questionId: q.id,
                 type: q.type || 'choice',
                 question: q.question,
+                image: q.image || null,
                 userAnswer: displayAnswer,
                 correctAnswer: correctAnswer,
                 isCorrect,
@@ -528,7 +533,7 @@ app.get('/api/results', async (req, res) => {
     }
 });
 
-// ============ СТАТИСТИКА (ИСПРАВЛЕНО) ============
+// ============ СТАТИСТИКА ============
 
 app.get('/api/admin/stats', async (req, res) => {
     const token = req.cookies.token;
@@ -563,7 +568,6 @@ app.get('/api/admin/stats', async (req, res) => {
                 questions: t.questions?.length || 0,
                 timeLimit: t.timeLimit || 0, createdBy: t.createdBy
             })),
-            // ✅ ПОКАЗЫВАЕМ ВСЕХ ПОЛЬЗОВАТЕЛЕЙ С РОЛЯМИ
             users: users.map(u => ({
                 username: u.username,
                 role: u.role || 'user'
@@ -814,7 +818,7 @@ app.post('/api/lessons', async (req, res) => {
         const decoded = jwt.verify(token, JWT_SECRET);
         if (decoded.role !== 'admin') return res.status(403).json({ error: 'Доступ только для администратора' });
         
-        const { title, category, content, formulas, examples } = req.body;
+        const { title, category, content, formulas, examples, image, linkedTestIds } = req.body;
         if (!title || !content) return res.status(400).json({ error: 'Нужны заголовок и содержание' });
         
         const lesson = {
@@ -823,6 +827,8 @@ app.post('/api/lessons', async (req, res) => {
             content,
             formulas: Array.isArray(formulas) ? formulas : [],
             examples: Array.isArray(examples) ? examples : [],
+            image: image || null,
+            linkedTestIds: Array.isArray(linkedTestIds) ? linkedTestIds : [],
             createdBy: decoded.username,
             createdAt: new Date()
         };
@@ -910,7 +916,7 @@ app.put('/api/lessons/:id', async (req, res) => {
         const decoded = jwt.verify(token, JWT_SECRET);
         if (decoded.role !== 'admin') return res.status(403).json({ error: 'Доступ только для администратора' });
         
-        const { title, category, content, formulas, examples } = req.body;
+        const { title, category, content, formulas, examples, image, linkedTestIds } = req.body;
         const lessonId = req.params.id;
         
         const updatedLesson = {
@@ -919,6 +925,8 @@ app.put('/api/lessons/:id', async (req, res) => {
             content,
             formulas: Array.isArray(formulas) ? formulas : [],
             examples: Array.isArray(examples) ? examples : [],
+            image: image || null,
+            linkedTestIds: Array.isArray(linkedTestIds) ? linkedTestIds : [],
             updatedAt: new Date()
         };
         
@@ -1037,27 +1045,6 @@ async function startServer() {
                 options: [],
                 correctText: 'м/с',
                 hint: 'Метр в секунду'
-            },
-            {
-                type: 'choice',
-                question: 'По какой формуле вычисляется плотность вещества?',
-                options: ['ρ = V/m', 'ρ = m/V', 'ρ = m*V', 'ρ = V/m²'],
-                correct: 1,
-                hint: 'Плотность = масса / объем'
-            },
-            {
-                type: 'input',
-                question: 'В чем измеряется сила в системе СИ? (напишите одним словом)',
-                options: [],
-                correctText: 'ньютон',
-                hint: 'Названа в честь учёного'
-            },
-            {
-                type: 'choice',
-                question: 'Какое количество теплоты требуется для нагревания тела?',
-                options: ['Q = cmΔt', 'Q = λm', 'Q = Lm', 'Q = qm'],
-                correct: 0,
-                hint: 'Количество теплоты = удельная теплоемкость × масса × изменение температуры'
             }
         ];
         
@@ -1068,6 +1055,7 @@ async function startServer() {
             category: 'Механика',
             timeLimit: 10,
             questions: testQuestions,
+            linkedLessonIds: [],
             createdBy: 'admin'
         });
         console.log('✅ Тестовый тест создан');
