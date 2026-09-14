@@ -287,11 +287,12 @@ app.post('/api/login', async (req, res) => {
         if (!validPassword) return res.status(400).json({ error: 'Неверный пароль' });
         
         const token = jwt.sign({ username, role: user.role }, JWT_SECRET, { expiresIn: '24h' });
-        res.cookie('token', token, { 
-            httpOnly: true, maxAge: 86400000,
-            sameSite: 'lax',
-            secure: process.env.NODE_ENV === 'production'
-        });
+      res.cookie('token', token, { 
+    httpOnly: true, 
+    maxAge: 86400000,
+    sameSite: 'none',  
+    secure: true       
+});
         res.json({ success: true, username, role: user.role });
     } catch (error) {
         console.error('Ошибка входа:', error);
