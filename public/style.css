@@ -1173,3 +1173,26 @@ body.in-call #background-squares {
         right: 15px;
     }
 }
+/* ============ 📱 МОБИЛЬНАЯ АДАПТАЦИЯ ============ */
+
+@media (max-width: 768px) {
+    /* Карточки "Статьи" / "Тесты" — в одну колонку */
+    div[style*="grid-template-columns: 1fr 1fr"],
+    div[style*="grid-template-columns:1fr 1fr"] {
+        grid-template-columns: 1fr !important;
+        gap: 15px !important;
+        max-width: 100% !important;
+    }
+    
+    /* На всякий случай — глобально не вылезать */
+    html, body {
+        overflow-x: hidden !important;
+        max-width: 100vw !important;
+    }
+    
+    .container {
+        padding: 12px !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+    }
+}
