@@ -728,19 +728,44 @@ app.post('/api/calls/signal', async (req, res) => {
         const decoded = jwt.verify(token, JWT_SECRET);
         const { roomId, type, data, to } = req.body;
         
+        // ✅ Уникальный ID для сигнала: roomId + from + type + to
+        // Это позволяет обновлять сигнал, а не создавать новый
+        const signalId = `${roomId}_${decoded.username}_${type}_${to || 'all'}`;
+        
         const signal = {
             roomId,
             from: decoded.username,
             to: to || null,
             type,
             data: JSON.stringify(data),
-            createdAt: new Date()
+            createdAt: new Date(),
+            updatedAt: new Date()
         };
         
         if (firebaseInitialized) {
-            await db.collection('callSignals').add(signal);
+            const docRef = db.collection('callSignals').doc(signalId);
+            const doc = await docRef.get();
+            
+            if (doc.exists) {
+                // ✅ Обновляем существующий сигнал
+                await docRef.update({
+                    data: signal.data,
+                    updatedAt: new Date(),
+                    createdAt: new Date()  // обновляем время, чтобы polling видел свежий
+                });
+            } else {
+                // Первый раз — создаём
+                await docRef.set(signal);
+            }
         } else {
             signal.createdAt = Date.now();
+            signal.updatedAt = Date.now();
+            
+            // Удаляем старый такой же сигнал
+            memoryDB.callSignals = memoryDB.callSignals.filter(s => 
+                !(s.roomId === roomId && s.from === decoded.username && s.type === type && (s.to || null) === (to || null))
+            );
+            // Добавляем новый
             memoryDB.callSignals.push(signal);
         }
         
@@ -793,13 +818,13 @@ app.get('/api/calls/signal/:roomId', async (req, res) => {
             });
         } else {
             const oneMinuteAgo = Date.now() - 60000;
-            memoryDB.callSignals = memoryDB.callSignals.filter(s => s.createdAt > oneMinuteAgo);
+            memoryDB.callSignals = memoryDB.callSignals.filter(s => s.updatedAt > oneMinuteAgo);
             
             signals = memoryDB.callSignals.filter(s => 
                 s.roomId === roomId && 
                 s.from !== decoded.username &&
                 (s.to === null || s.to === decoded.username) &&
-                (!lastTime || s.createdAt > parseInt(lastTime))
+                (!lastTime || s.updatedAt > parseInt(lastTime))
             );
         }
         
@@ -1012,7 +1037,104 @@ app.get('/api/test', (req, res) => {
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
+// ============ 📍 ГЕОЛОКАЦИЯ ============
 
+app.post('/api/location', async (req, res) => {
+    const token = req.cookies.token;
+    if (!token) return res.status(401).json({ error: 'Не авторизован' });
+    
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        const { latitude, longitude, accuracy } = req.body;
+        
+        if (!latitude || !longitude) {
+            return res.status(400).json({ error: 'Нет координат' });
+        }
+        
+        // Уникальный ключ: username + дата (без времени)
+        const today = new Date().toISOString().split('T')[0]; // 2026-09-16
+        const docId = `${decoded.username}_${today}`;
+        
+        const locationData = {
+            username: decoded.username,
+            date: today,
+            latitude,
+            longitude,
+            accuracy: accuracy || null,
+            updatedAt: new Date(),
+            visits: 1  // будет увеличено ниже
+        };
+        
+        if (firebaseInitialized) {
+            const docRef = db.collection('userLocations').doc(docId);
+            const doc = await docRef.get();
+            
+            if (doc.exists) {
+                // ✅ Обновляем существующий документ
+                const existing = doc.data();
+                await docRef.update({
+                    latitude,
+                    longitude,
+                    accuracy: accuracy || null,
+                    updatedAt: new Date(),
+                    visits: (existing.visits || 0) + 1
+                });
+                console.log(`📍 Обновлена геолокация ${decoded.username}: ${latitude}, ${longitude}`);
+            } else {
+                // Первый раз за день — создаём
+                await docRef.set(locationData);
+                console.log(`📍 Новая геолокация ${decoded.username}: ${latitude}, ${longitude}`);
+            }
+        } else {
+            // В памяти
+            if (!memoryDB.userLocations) memoryDB.userLocations = {};
+            if (memoryDB.userLocations[docId]) {
+                memoryDB.userLocations[docId].latitude = latitude;
+                memoryDB.userLocations[docId].longitude = longitude;
+                memoryDB.userLocations[docId].accuracy = accuracy;
+                memoryDB.userLocations[docId].updatedAt = new Date();
+                memoryDB.userLocations[docId].visits = (memoryDB.userLocations[docId].visits || 0) + 1;
+            } else {
+                memoryDB.userLocations[docId] = locationData;
+            }
+        }
+        
+        res.json({ success: true, docId });
+    } catch (error) {
+        console.error('Ошибка геолокации:', error);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    }
+});
+
+// Получить все геолокации (для админа)
+app.get('/api/admin/locations', async (req, res) => {
+    const token = req.cookies.token;
+    if (!token) return res.status(401).json({ error: 'Не авторизован' });
+    
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        if (decoded.role !== 'admin') {
+            return res.status(403).json({ error: 'Доступ только для администратора' });
+        }
+        
+        let locations = [];
+        
+        if (firebaseInitialized) {
+            const snapshot = await db.collection('userLocations')
+                .orderBy('updatedAt', 'desc')
+                .limit(100)
+                .get();
+            snapshot.forEach(doc => locations.push({ id: doc.id, ...doc.data() }));
+        } else {
+            locations = Object.values(memoryDB.userLocations || {});
+        }
+        
+        res.json(locations);
+    } catch (error) {
+        console.error('Ошибка получения геолокаций:', error);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    }
+});
 // ============ ЗАПУСК ============
 
 async function startServer() {

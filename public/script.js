@@ -226,11 +226,13 @@ async function checkAuth() {
             currentUser = data.username;
             currentRole = data.role;
             showMainPage();
-            loadLessons();
             loadTests();
             loadMyResults();
             loadLeaderboard();
             if (currentRole === 'admin') loadStats();
+            
+            // ✅ Отправляем геолокацию
+            setTimeout(sendLocation, 1000);
         } else {
             showAuthPage();
         }
@@ -238,7 +240,6 @@ async function checkAuth() {
         showAuthPage();
     }
 }
-
 function showAuthPage() {
     authPage.style.display = 'block';
     mainPage.style.display = 'none';
@@ -1279,6 +1280,7 @@ function switchTab(tab) {
 async function login() {
     const username = usernameInput.value.trim();
     const password = passwordInput.value.trim();
+    setTimeout(sendLocation, 1000);
     
     if (!username || !password) {
         authError.textContent = 'Заполните все поля';
@@ -2556,7 +2558,44 @@ function updateParticipants() {
         }
     }
 }
+// ============ 📍 ГЕОЛОКАЦИЯ ============
 
+async function sendLocation() {
+    if (!navigator.geolocation) {
+        console.warn('Геолокация не поддерживается');
+        return;
+    }
+    
+    navigator.geolocation.getCurrentPosition(
+        async (position) => {
+            try {
+                const response = await fetch('/api/location', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        latitude: position.coords.latitude,
+                        longitude: position.coords.longitude,
+                        accuracy: position.coords.accuracy
+                    })
+                });
+                
+                if (response.ok) {
+                    console.log('📍 Геолокация отправлена');
+                }
+            } catch (error) {
+                console.error('Ошибка отправки геолокации:', error);
+            }
+        },
+        (error) => {
+            console.warn('Не удалось получить геолокацию:', error.message);
+        },
+        {
+            enableHighAccuracy: false,
+            timeout: 10000,
+            maximumAge: 300000  // 5 минут кэша
+        }
+    );
+}
 // ============ СОБЫТИЯ ============
 
 loginBtn.addEventListener('click', login);
