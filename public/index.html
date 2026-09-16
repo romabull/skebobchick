@@ -40,6 +40,20 @@
                 <div class="header-content">
                     <h1>🔬 Платформа тестирования</h1>
                     <div class="user-info">
+                        <!-- 🔔 Уведомления -->
+                        <div style="position: relative;">
+                            <button id="notificationsBtn" style="background: none; border: none; font-size: 22px; cursor: pointer; position: relative; padding: 5px 10px;">
+                                🔔
+                                <span id="notifBadge" style="display: none; position: absolute; top: 0; right: 0; background: #fc8181; color: white; border-radius: 50%; min-width: 18px; height: 18px; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; padding: 0 4px;"></span>
+                            </button>
+                            <div id="notifPanel" style="display: none; position: absolute; top: 100%; right: 0; width: 320px; max-height: 400px; overflow-y: auto; background: white; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.15); z-index: 1000; padding: 8px;">
+                                <div style="padding: 10px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
+                                    <strong>🔔 Уведомления</strong>
+                                    <button id="markAllReadBtn" style="background: none; border: none; color: #667eea; cursor: pointer; font-size: 13px;">Прочитать все</button>
+                                </div>
+                                <div id="notifList"></div>
+                            </div>
+                        </div>
                         <span id="currentUser"></span>
                         <span id="userRole" class="role-tag"></span>
                         <button id="logoutBtn" class="btn-small">Выйти</button>
@@ -78,209 +92,193 @@
                 <div id="leaderboardContent"></div>
             </div>
 
-         <!-- ============ 📚 ОБУЧЕНИЕ ============ -->
-<div id="tab-lessons" class="tab-content active">
-    
-    <!-- ЭКРАН 1: Выбор (2 кнопки) -->
-    <div id="lessonsChoiceView">
-        <h2 style="text-align: center; margin-bottom: 30px; color: #2d3748;">📚 Обучение</h2>
-        
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 25px; max-width: 800px; margin: 0 auto;">
-            <!-- Статьи -->
-            <div class="choice-card" onclick="openLessonsArticles()" 
-                 style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                        border-radius: 20px; padding: 40px 30px; cursor: pointer; 
-                        text-align: center; color: white; transition: all 0.3s;
-                        box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);"
-                 onmouseover="this.style.transform='translateY(-5px)'; this.style.boxShadow='0 15px 40px rgba(102, 126, 234, 0.5)'"
-                 onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 10px 30px rgba(102, 126, 234, 0.3)'">
-                <div style="font-size: 80px; margin-bottom: 20px;">📖</div>
-                <h3 style="margin: 0 0 12px; font-size: 1.5em; color: white;">Статьи</h3>
-                <p style="margin: 0 0 25px; opacity: 0.9; font-size: 15px; line-height: 1.5;">
-                    Теория, формулы, примеры решения задач
-                </p>
-                <button class="btn-primary" style="background: white; color: #667eea; font-weight: 700; padding: 12px 30px;">
-                    Открыть →
-                </button>
-            </div>
-            
-            <!-- Тесты -->
-            <div class="choice-card" onclick="openLessonsTests()" 
-                 style="background: linear-gradient(135deg, #48bb78 0%, #38a169 100%); 
-                        border-radius: 20px; padding: 40px 30px; cursor: pointer; 
-                        text-align: center; color: white; transition: all 0.3s;
-                        box-shadow: 0 10px 30px rgba(72, 187, 120, 0.3);"
-                 onmouseover="this.style.transform='translateY(-5px)'; this.style.boxShadow='0 15px 40px rgba(72, 187, 120, 0.5)'"
-                 onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 10px 30px rgba(72, 187, 120, 0.3)'">
-                <div style="font-size: 80px; margin-bottom: 20px;">📝</div>
-                <h3 style="margin: 0 0 12px; font-size: 1.5em; color: white;">Тесты</h3>
-                <p style="margin: 0 0 25px; opacity: 0.9; font-size: 15px; line-height: 1.5;">
-                    Проверка знаний, оценка, результаты
-                </p>
-                <button class="btn-primary" style="background: white; color: #48bb78; font-weight: 700; padding: 12px 30px;">
-                    Открыть →
-                </button>
-            </div>
-        </div>
-    </div>
-    
-    <!-- ЭКРАН 2: Статьи (открывается после нажатия) -->
-    <div id="lessonsArticlesView" style="display: none;">
-        <button onclick="backToLessonsChoice()" class="btn-small" style="margin-bottom: 20px; background: #667eea;">← Назад к выбору</button>
-        
-        <div id="lessonsListView">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px;">
-                <h2 style="margin: 0;">📖 Статьи</h2>
-                <button id="createLessonBtn" class="btn-primary" style="display: none;">+ Создать статью</button>
-            </div>
-            
-            <div style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
-                <input type="text" id="lessonSearch" placeholder="🔍 Поиск по темам..." 
-                       style="flex: 1; min-width: 200px; padding: 10px 15px; border: 2px solid #e2e8f0; border-radius: 10px; font-size: 15px;">
-                <select id="lessonCategoryFilter" 
-                        style="padding: 10px 15px; border: 2px solid #e2e8f0; border-radius: 10px; font-size: 15px; min-width: 180px; cursor: pointer;">
-                    <option value="">📚 Все категории</option>
-                </select>
-            </div>
-            
-            <div id="lessonsList"></div>
-        </div>
-
-        <!-- Просмотр статьи -->
-        <div id="lessonView" style="display: none;">
-            <button id="backToLessonsBtn" class="btn-small" style="margin-bottom: 20px; background: #667eea;">← К списку статей</button>
-            <div id="lessonContent"></div>
-        </div>
-
-        <!-- Редактор статьи -->
-        <div id="lessonEditor" style="display: none;">
-            <button id="backFromEditorBtn" class="btn-small" style="margin-bottom: 20px;">← Отмена</button>
-            <h2 id="editorTitle" style="margin-bottom: 20px;">Создать статью</h2>
-            <form id="lessonForm">
-                <input type="hidden" id="lessonId">
+            <!-- ============ 📚 ОБУЧЕНИЕ ============ -->
+            <div id="tab-lessons" class="tab-content active">
                 
-                <div class="form-group">
-                    <label>Заголовок *</label>
-                    <input type="text" id="lessonTitle" placeholder="Например: Законы Ньютона" required>
-                </div>
-                
-                <div class="form-group">
-                    <label>📚 Категория</label>
-                    <select id="lessonCategory" style="width: 100%; padding: 12px; border: 2px solid #e2e8f0; border-radius: 10px; font-size: 16px;">
-                        <option value="Механика">Механика</option>
-                        <option value="Термодинамика">Термодинамика</option>
-                        <option value="Электричество">Электричество</option>
-                        <option value="Оптика">Оптика</option>
-                        <option value="Квантовая физика">Квантовая физика</option>
-                        <option value="Астрономия">Астрономия</option>
-                        <option value="Другое" selected>Другое</option>
-                    </select>
-                </div>
-                
-                <div class="form-group">
-                    <label>📝 Содержание</label>
-                    <textarea id="lessonContentInput" placeholder="Введите теорию..." style="min-height: 300px; font-family: monospace; font-size: 15px;"></textarea>
-                    <small style="color: #718096; font-size: 13px;">**жирный** → жирный, ### Заголовок → большой заголовок</small>
-                </div>
-                
-                <div class="form-group">
-                    <label>🧮 Формулы (по одной на строку)</label>
-                    <textarea id="lessonFormulas" placeholder="F = m · a" style="min-height: 100px; font-family: monospace; font-size: 15px;"></textarea>
-                </div>
-                
-                <div class="form-group">
-                    <label>💡 Примеры задач (по одному на строку)</label>
-                    <textarea id="lessonExamples" placeholder="Задача: Тело массой 5 кг..." style="min-height: 120px; font-family: monospace; font-size: 15px;"></textarea>
-                </div>
-                
-                <div class="form-group">
-                    <label>📝 Привязать тесты (можно несколько)</label>
-                    <div id="lessonLinkedTests" style="max-height: 200px; overflow-y: auto; padding: 12px; background: #f7fafc; border-radius: 8px; border: 2px solid #e2e8f0;">
-                        <!-- Заполняется JS -->
+                <!-- ЭКРАН 1: Выбор -->
+                <div id="lessonsChoiceView">
+                    <h2 style="text-align: center; margin-bottom: 30px; color: #2d3748;">📚 Обучение</h2>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 25px; max-width: 800px; margin: 0 auto;">
+                        <div class="choice-card" onclick="openLessonsArticles()" 
+                             style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 20px; padding: 40px 30px; cursor: pointer; text-align: center; color: white; transition: all 0.3s; box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);"
+                             onmouseover="this.style.transform='translateY(-5px)'"
+                             onmouseout="this.style.transform='translateY(0)'">
+                            <div style="font-size: 80px; margin-bottom: 20px;">📖</div>
+                            <h3 style="margin: 0 0 12px; font-size: 1.5em; color: white;">Статьи</h3>
+                            <p style="margin: 0 0 25px; opacity: 0.9; font-size: 15px; line-height: 1.5;">Теория, формулы, примеры решения задач</p>
+                            <button class="btn-primary" style="background: white; color: #667eea; font-weight: 700; padding: 12px 30px;">Открыть →</button>
+                        </div>
+                        
+                        <div class="choice-card" onclick="openLessonsTests()" 
+                             style="background: linear-gradient(135deg, #48bb78 0%, #38a169 100%); border-radius: 20px; padding: 40px 30px; cursor: pointer; text-align: center; color: white; transition: all 0.3s; box-shadow: 0 10px 30px rgba(72, 187, 120, 0.3);"
+                             onmouseover="this.style.transform='translateY(-5px)'"
+                             onmouseout="this.style.transform='translateY(0)'">
+                            <div style="font-size: 80px; margin-bottom: 20px;">📝</div>
+                            <h3 style="margin: 0 0 12px; font-size: 1.5em; color: white;">Тесты</h3>
+                            <p style="margin: 0 0 25px; opacity: 0.9; font-size: 15px; line-height: 1.5;">Проверка знаний, оценка, результаты</p>
+                            <button class="btn-primary" style="background: white; color: #48bb78; font-weight: 700; padding: 12px 30px;">Открыть →</button>
+                        </div>
                     </div>
                 </div>
                 
-                <div style="display: flex; gap: 10px; margin-top: 20px;">
-                    <button type="submit" class="btn-primary">💾 Сохранить</button>
-                    <button type="button" id="cancelLessonBtn" class="btn-secondary">❌ Отмена</button>
-                </div>
-            </form>
-        </div>
-    </div>
-    
-    <!-- ЭКРАН 3: Тесты (открывается после нажатия) -->
-    <div id="lessonsTestsView" style="display: none;">
-        <button onclick="backToLessonsChoice()" class="btn-small" style="margin-bottom: 20px; background: #48bb78;">← Назад к выбору</button>
-        
-        <div id="testsListView">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px;">
-                <h2 style="margin: 0;">📝 Тесты</h2>
-                <button id="createTestBtn" class="btn-primary" style="display: none;">+ Создать тест</button>
-            </div>
-            
-            <div style="margin-bottom: 15px;">
-                <select id="categoryFilter" style="padding: 10px 15px; border: 2px solid #e2e8f0; border-radius: 10px; font-size: 15px; min-width: 200px; cursor: pointer;">
-                    <option value="">📚 Все категории</option>
-                </select>
-            </div>
-            
-            <div id="testsList"></div>
-        </div>
+                <!-- ЭКРАН 2: Статьи -->
+                <div id="lessonsArticlesView" style="display: none;">
+                    <button onclick="backToLessonsChoice()" class="btn-small" style="margin-bottom: 20px; background: #667eea;">← Назад к выбору</button>
+                    
+                    <div id="lessonsListView">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px;">
+                            <h2 style="margin: 0;">📖 Статьи</h2>
+                            <button id="createLessonBtn" class="btn-primary" style="display: none;">+ Создать статью</button>
+                        </div>
+                        
+                        <div style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
+                            <input type="text" id="lessonSearch" placeholder="🔍 Поиск по темам..." 
+                                   style="flex: 1; min-width: 200px; padding: 10px 15px; border: 2px solid #e2e8f0; border-radius: 10px; font-size: 15px;">
+                            <select id="lessonCategoryFilter" 
+                                    style="padding: 10px 15px; border: 2px solid #e2e8f0; border-radius: 10px; font-size: 15px; min-width: 180px; cursor: pointer;">
+                                <option value="">📚 Все категории</option>
+                                <option value="Механика">Механика</option>
+                                <option value="Термодинамика">Термодинамика</option>
+                                <option value="Электричество">Электричество</option>
+                                <option value="Оптика">Оптика</option>
+                                <option value="Квантовая физика">Квантовая физика</option>
+                                <option value="Астрономия">Астрономия</option>
+                                <option value="Другое">Другое</option>
+                            </select>
+                        </div>
+                        
+                        <div id="lessonsList"></div>
+                    </div>
 
-        <!-- Редактор теста -->
-        <div id="testEditor" style="display: none;">
-            <button id="backFromTestEditorBtn" class="btn-small" style="margin-bottom: 20px;">← Отмена</button>
-            <h2 id="testEditorTitle" style="margin-bottom: 20px;">Создать тест</h2>
-            <form id="createTestForm">
-                <input type="hidden" id="editTestId">
-                
-                <div class="form-group">
-                    <label>Название теста</label>
-                    <input type="text" id="testTitle" placeholder="Введите название" required>
-                </div>
-                <div class="form-group">
-                    <label>Описание</label>
-                    <textarea id="testDescription" placeholder="Краткое описание"></textarea>
-                </div>
-                <div class="form-group">
-                    <label>Класс</label>
-                    <input type="text" id="testClass" placeholder="7-8" value="7-8">
-                </div>
-                <div class="form-group">
-                    <label>📚 Категория</label>
-                    <select id="testCategory" style="width: 100%; padding: 12px; border: 2px solid #e2e8f0; border-radius: 10px; font-size: 16px;">
-                        <option value="Механика">Механика</option>
-                        <option value="Термодинамика">Термодинамика</option>
-                        <option value="Электричество">Электричество</option>
-                        <option value="Оптика">Оптика</option>
-                        <option value="Квантовая физика">Квантовая физика</option>
-                        <option value="Астрономия">Астрономия</option>
-                        <option value="Другое" selected>Другое</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>⏱️ Ограничение времени (минут, 0 = без ограничения)</label>
-                    <input type="number" id="testTimeLimit" min="0" max="180" value="0">
-                </div>
-                
-                <div class="form-group">
-                    <label>📖 Привязать статьи (можно несколько)</label>
-                    <div id="testLinkedLessons" style="max-height: 200px; overflow-y: auto; padding: 12px; background: #f7fafc; border-radius: 8px; border: 2px solid #e2e8f0;">
-                        <!-- Заполняется JS -->
+                    <div id="lessonView" style="display: none;">
+                        <button id="backToLessonsBtn" class="btn-small" style="margin-bottom: 20px; background: #667eea;">← К списку статей</button>
+                        <div id="lessonContent"></div>
+                    </div>
+
+                    <div id="lessonEditor" style="display: none;">
+                        <button id="backFromEditorBtn" class="btn-small" style="margin-bottom: 20px;">← Отмена</button>
+                        <h2 id="editorTitle" style="margin-bottom: 20px;">Создать статью</h2>
+                        <form id="lessonForm">
+                            <input type="hidden" id="lessonId">
+                            
+                            <div class="form-group">
+                                <label>Заголовок *</label>
+                                <input type="text" id="lessonTitle" placeholder="Например: Законы Ньютона" required>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>📚 Категория</label>
+                                <select id="lessonCategory" style="width: 100%; padding: 12px; border: 2px solid #e2e8f0; border-radius: 10px; font-size: 16px;">
+                                    <option value="Механика">Механика</option>
+                                    <option value="Термодинамика">Термодинамика</option>
+                                    <option value="Электричество">Электричество</option>
+                                    <option value="Оптика">Оптика</option>
+                                    <option value="Квантовая физика">Квантовая физика</option>
+                                    <option value="Астрономия">Астрономия</option>
+                                    <option value="Другое" selected>Другое</option>
+                                </select>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>📝 Содержание</label>
+                                <textarea id="lessonContentInput" placeholder="Введите теорию..." style="min-height: 300px; font-family: monospace; font-size: 15px;"></textarea>
+                                <small style="color: #718096; font-size: 13px;">**жирный** → жирный, ### Заголовок → большой заголовок</small>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>🧮 Формулы (по одной на строку)</label>
+                                <textarea id="lessonFormulas" placeholder="F = m · a" style="min-height: 100px; font-family: monospace; font-size: 15px;"></textarea>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>💡 Примеры задач (по одному на строку)</label>
+                                <textarea id="lessonExamples" placeholder="Задача: Тело массой 5 кг..." style="min-height: 120px; font-family: monospace; font-size: 15px;"></textarea>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>📝 Привязать тесты (можно несколько)</label>
+                                <div id="lessonLinkedTests" style="max-height: 200px; overflow-y: auto; padding: 12px; background: #f7fafc; border-radius: 8px; border: 2px solid #e2e8f0;"></div>
+                            </div>
+                            
+                            <div style="display: flex; gap: 10px; margin-top: 20px;">
+                                <button type="submit" class="btn-primary">💾 Сохранить</button>
+                                <button type="button" id="cancelLessonBtn" class="btn-secondary">❌ Отмена</button>
+                            </div>
+                        </form>
                     </div>
                 </div>
                 
-                <div id="questionsEditor">
-                    <h3>Вопросы</h3>
-                    <div id="questionsList"></div>
-                    <button type="button" id="addQuestionBtn" class="btn-secondary">+ Добавить вопрос</button>
+                <!-- ЭКРАН 3: Тесты -->
+                <div id="lessonsTestsView" style="display: none;">
+                    <button onclick="backToLessonsChoice()" class="btn-small" style="margin-bottom: 20px; background: #48bb78;">← Назад к выбору</button>
+                    
+                    <div id="testsListView">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px;">
+                            <h2 style="margin: 0;">📝 Тесты</h2>
+                            <button id="createTestBtn" class="btn-primary" style="display: none;">+ Создать тест</button>
+                        </div>
+                        
+                        <div style="margin-bottom: 15px;">
+                            <select id="categoryFilter" style="padding: 10px 15px; border: 2px solid #e2e8f0; border-radius: 10px; font-size: 15px; min-width: 200px; cursor: pointer;">
+                                <option value="">📚 Все категории</option>
+                            </select>
+                        </div>
+                        
+                        <div id="testsList"></div>
+                    </div>
+
+                    <div id="testEditor" style="display: none;">
+                        <button id="backFromTestEditorBtn" class="btn-small" style="margin-bottom: 20px;">← Отмена</button>
+                        <h2 id="testEditorTitle" style="margin-bottom: 20px;">Создать тест</h2>
+                        <form id="createTestForm">
+                            <input type="hidden" id="editTestId">
+                            
+                            <div class="form-group">
+                                <label>Название теста</label>
+                                <input type="text" id="testTitle" placeholder="Введите название" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Описание</label>
+                                <textarea id="testDescription" placeholder="Краткое описание"></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label>Класс</label>
+                                <input type="text" id="testClass" placeholder="7-8" value="7-8">
+                            </div>
+                            <div class="form-group">
+                                <label>📚 Категория</label>
+                                <select id="testCategory" style="width: 100%; padding: 12px; border: 2px solid #e2e8f0; border-radius: 10px; font-size: 16px;">
+                                    <option value="Механика">Механика</option>
+                                    <option value="Термодинамика">Термодинамика</option>
+                                    <option value="Электричество">Электричество</option>
+                                    <option value="Оптика">Оптика</option>
+                                    <option value="Квантовая физика">Квантовая физика</option>
+                                    <option value="Астрономия">Астрономия</option>
+                                    <option value="Другое" selected>Другое</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>⏱️ Ограничение времени (минут, 0 = без ограничения)</label>
+                                <input type="number" id="testTimeLimit" min="0" max="180" value="0">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>📖 Привязать статьи (можно несколько)</label>
+                                <div id="testLinkedLessons" style="max-height: 200px; overflow-y: auto; padding: 12px; background: #f7fafc; border-radius: 8px; border: 2px solid #e2e8f0;"></div>
+                            </div>
+                            
+                            <div id="questionsEditor">
+                                <h3>Вопросы</h3>
+                                <div id="questionsList"></div>
+                                <button type="button" id="addQuestionBtn" class="btn-secondary">+ Добавить вопрос</button>
+                            </div>
+                            
+                            <button type="submit" class="btn-primary" style="margin-top: 20px;">💾 Сохранить тест</button>
+                        </form>
+                    </div>
                 </div>
-                
-                <button type="submit" class="btn-primary" style="margin-top: 20px;">💾 Сохранить тест</button>
-            </form>
-        </div>
-    </div>
-</div>
+            </div>
 
             <!-- Вкладка: Звонки -->
             <div id="tab-calls" class="tab-content">

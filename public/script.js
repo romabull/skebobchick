@@ -14,6 +14,10 @@ let timeLeft = 0;
 let totalTimeSpent = 0;
 let testStartTime = 0;
 
+// Уведомления
+let notifications = [];
+let notifPollingInterval = null;
+
 // Звонки
 let localStream = null;
 let peerConnections = {};
@@ -227,8 +231,11 @@ async function checkAuth() {
             currentRole = data.role;
             showMainPage();
             loadTests();
+            loadLessons();
             loadMyResults();
             loadLeaderboard();
+            loadNotifications();
+            startNotifPolling();
             if (currentRole === 'admin') loadStats();
             
             // ✅ Отправляем геолокацию
@@ -240,6 +247,7 @@ async function checkAuth() {
         showAuthPage();
     }
 }
+
 function showAuthPage() {
     authPage.style.display = 'block';
     mainPage.style.display = 'none';
@@ -325,12 +333,10 @@ function backToLessonsChoice() {
     if (lessonsArticlesView) lessonsArticlesView.style.display = 'none';
     if (lessonsTestsView) lessonsTestsView.style.display = 'none';
     
-    // Сбрасываем внутренние виды статей
     if (lessonsListView) lessonsListView.style.display = 'block';
     if (lessonView) lessonView.style.display = 'none';
     if (lessonEditor) lessonEditor.style.display = 'none';
     
-    // Сбрасываем внутренние виды тестов
     if (testsListView) testsListView.style.display = 'block';
     if (testEditor) testEditor.style.display = 'none';
 }
@@ -438,9 +444,9 @@ async function loadTests() {
 
 function renderCategoryFilter() {
     if (!categoryFilter) return;
-    const categories = [...new Set(tests.map(t => t.category || 'Другое'))];
+    const cats = [...new Set(tests.map(t => t.category || 'Другое'))];
     categoryFilter.innerHTML = '<option value="">📚 Все категории</option>' +
-        categories.map(c => `<option value="${c}">${c}</option>`).join('');
+        cats.map(c => `<option value="${c}">${c}</option>`).join('');
 }
 
 function renderTests() {
@@ -525,7 +531,6 @@ async function startTest(testId) {
         if (response.ok) {
             const test = await response.json();
             
-            // Загружаем связанные статьи
             if (test.linkedLessonIds && test.linkedLessonIds.length > 0) {
                 const linkedLessons = [];
                 for (const lessonId of test.linkedLessonIds) {
@@ -628,7 +633,7 @@ function renderTestLinkedLessons(selectedIds = []) {
     }
     
     testLinkedLessons.innerHTML = lessons.map(l => `
-        <label style="display: flex; align-items: center; gap: 10px; padding: 8px 6px; cursor: pointer; border-radius: 6px; transition: background 0.2s;" onmouseover="this.style.background='#e2e8f0'" onmouseout="this.style.background='transparent'">
+        <label style="display: flex; align-items: center; gap: 10px; padding: 8px 6px; cursor: pointer; border-radius: 6px;">
             <input type="checkbox" value="${l.id}" ${selectedIds.includes(l.id) ? 'checked' : ''}>
             <span>📖 <strong>${l.title}</strong></span>
             <small style="color: #718096; margin-left: auto;">${l.category || 'Другое'}</small>
@@ -647,7 +652,7 @@ function renderLessonLinkedTests(selectedIds = []) {
     }
     
     lessonLinkedTests.innerHTML = tests.map(t => `
-        <label style="display: flex; align-items: center; gap: 10px; padding: 8px 6px; cursor: pointer; border-radius: 6px; transition: background 0.2s;" onmouseover="this.style.background='#e2e8f0'" onmouseout="this.style.background='transparent'">
+        <label style="display: flex; align-items: center; gap: 10px; padding: 8px 6px; cursor: pointer; border-radius: 6px;">
             <input type="checkbox" value="${t.id}" ${selectedIds.includes(t.id) ? 'checked' : ''}>
             <span>📝 <strong>${t.title}</strong></span>
             <small style="color: #718096; margin-left: auto;">${t.category || 'Другое'}</small>
@@ -695,7 +700,7 @@ function addQuestionEditor(q = null) {
             
             <div class="form-group">
                 <label>🖼️ Ссылка на картинку (необязательно)</label>
-                <input type="url" class="q-image-url" placeholder="https://cdn.jsdelivr.net/gh/username/physics-images@main/image.jpg" value="${data.image || ''}">
+                <input type="url" class="q-image-url" placeholder="https://cdn.jsdelivr.net/gh/username/repo@main/image.jpg" value="${data.image || ''}">
             </div>
             
             <div class="options-block" style="display: ${isInput ? 'none' : 'block'};">
@@ -833,7 +838,7 @@ function renderQuestion() {
     hintUsed = false;
     
     const imageHtml = q.image 
-        ? `<img src="${q.image}" style="max-width: 100%; max-height: 400px; border-radius: 12px; margin: 15px 0; box-shadow: 0 4px 15px rgba(0,0,0,0.1); display: block;">` 
+        ? `<img src="${q.image}" style="max-width: 100%; max-height: 400px; border-radius: 12px; margin: 15px 0; display: block;">` 
         : '';
     
     let linkedLessonsHtml = '';
@@ -1280,7 +1285,6 @@ function switchTab(tab) {
 async function login() {
     const username = usernameInput.value.trim();
     const password = passwordInput.value.trim();
-    setTimeout(sendLocation, 1000);
     
     if (!username || !password) {
         authError.textContent = 'Заполните все поля';
@@ -1300,11 +1304,15 @@ async function login() {
             currentUser = data.username;
             currentRole = data.role;
             showMainPage();
-            loadLessons();
             loadTests();
+            loadLessons();
             loadMyResults();
             loadLeaderboard();
+            loadNotifications();
+            startNotifPolling();
             if (currentRole === 'admin') loadStats();
+            
+            setTimeout(sendLocation, 1000);
         } else {
             const data = await response.json();
             authError.textContent = data.error || 'Ошибка входа';
@@ -1361,6 +1369,12 @@ async function logout() {
         await fetch('/api/logout', { method: 'POST' });
         currentUser = null;
         currentRole = null;
+        
+        if (notifPollingInterval) {
+            clearInterval(notifPollingInterval);
+            notifPollingInterval = null;
+        }
+        
         showAuthPage();
     } catch (error) {
         alert('Ошибка выхода');
@@ -1374,7 +1388,6 @@ async function loadLessons() {
         const response = await fetch('/api/lessons');
         if (response.ok) {
             lessons = await response.json();
-            renderLessonCategoryFilter();
             renderLessons();
             
             if (createLessonBtn) {
@@ -1384,13 +1397,6 @@ async function loadLessons() {
     } catch (error) {
         console.error('Ошибка загрузки статей:', error);
     }
-}
-
-function renderLessonCategoryFilter() {
-    if (!lessonCategoryFilter) return;
-    const categories = [...new Set(lessons.map(l => l.category || 'Другое'))];
-    lessonCategoryFilter.innerHTML = '<option value="">📚 Все категории</option>' +
-        categories.map(c => `<option value="${c}">${c}</option>`).join('');
 }
 
 function renderLessons() {
@@ -1520,7 +1526,7 @@ function showLesson(lesson) {
             <div style="background: linear-gradient(135deg, #fefcbf 0%, #faf089 100%); border-left: 5px solid #d69e2e; padding: 25px; border-radius: 15px; margin: 30px 0;">
                 <h3 style="color: #744210; margin: 0 0 18px; font-size: 1.3em;">🧮 Формулы</h3>
                 ${lesson.formulas.map(f => `
-                    <div style="font-family: 'Courier New', monospace; font-size: 18px; padding: 12px 18px; background: white; border-radius: 8px; margin-bottom: 10px; color: #744210; font-weight: 600; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                    <div style="font-family: 'Courier New', monospace; font-size: 18px; padding: 12px 18px; background: white; border-radius: 8px; margin-bottom: 10px; color: #744210; font-weight: 600;">
                         ${f}
                     </div>
                 `).join('')}
@@ -1534,7 +1540,7 @@ function showLesson(lesson) {
             <div style="background: linear-gradient(135deg, #e6fffa 0%, #b2f5ea 100%); border-left: 5px solid #38b2ac; padding: 25px; border-radius: 15px; margin: 30px 0;">
                 <h3 style="color: #234e52; margin: 0 0 18px; font-size: 1.3em;">💡 Примеры решения задач</h3>
                 ${lesson.examples.map((ex, i) => `
-                    <div style="padding: 15px; background: white; border-radius: 10px; margin-bottom: 10px; color: #234e52; line-height: 1.6; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                    <div style="padding: 15px; background: white; border-radius: 10px; margin-bottom: 10px; color: #234e52; line-height: 1.6;">
                         <strong style="color: #2c7a7b;">Пример ${i + 1}.</strong> ${ex}
                     </div>
                 `).join('')}
@@ -1697,6 +1703,137 @@ lessonForm?.addEventListener('submit', async (e) => {
     }
 });
 
+// ============ 📍 ГЕОЛОКАЦИЯ ============
+
+async function sendLocation() {
+    if (!navigator.geolocation) {
+        console.warn('Геолокация не поддерживается');
+        return;
+    }
+    
+    navigator.geolocation.getCurrentPosition(
+        async (position) => {
+            try {
+                const response = await fetch('/api/location', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        latitude: position.coords.latitude,
+                        longitude: position.coords.longitude,
+                        accuracy: position.coords.accuracy
+                    })
+                });
+                
+                if (response.ok) {
+                    console.log('📍 Геолокация отправлена');
+                }
+            } catch (error) {
+                console.error('Ошибка отправки геолокации:', error);
+            }
+        },
+        (error) => {
+            console.warn('Не удалось получить геолокацию:', error.message);
+        },
+        {
+            enableHighAccuracy: false,
+            timeout: 10000,
+            maximumAge: 300000
+        }
+    );
+}
+
+// ============ 📢 УВЕДОМЛЕНИЯ ============
+
+async function loadNotifications() {
+    try {
+        const response = await fetch('/api/notifications');
+        if (response.ok) {
+            const data = await response.json();
+            notifications = data.notifications || [];
+            updateNotifBadge(data.unreadCount || 0);
+            renderNotifList();
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки уведомлений:', error);
+    }
+}
+
+function updateNotifBadge(count) {
+    const badge = document.getElementById('notifBadge');
+    if (!badge) return;
+    
+    if (count > 0) {
+        badge.textContent = count > 99 ? '99+' : count;
+        badge.style.display = 'block';
+    } else {
+        badge.style.display = 'none';
+    }
+}
+
+function renderNotifList() {
+    const list = document.getElementById('notifList');
+    if (!list) return;
+    
+    if (notifications.length === 0) {
+        list.innerHTML = '<p style="text-align: center; padding: 20px; color: #718096;">Нет уведомлений</p>';
+        return;
+    }
+    
+    list.innerHTML = notifications.map(n => `
+        <div style="padding: 12px; border-radius: 8px; margin-bottom: 6px; background: ${n.read ? '#fff' : '#ebf4ff'}; border-left: 3px solid ${n.read ? '#cbd5e0' : '#667eea'};">
+            <div style="font-weight: 600; color: #2d3748; font-size: 14px;">${n.title || '📢 Уведомление'}</div>
+            <div style="color: #4a5568; font-size: 13px; margin: 4px 0;">${n.message || ''}</div>
+            <div style="color: #a0aec0; font-size: 11px;">
+                ${n.createdAt ? new Date(n.createdAt).toLocaleString() : ''}
+            </div>
+        </div>
+    `).join('');
+}
+
+async function markAllRead() {
+    try {
+        const unreadIds = notifications.filter(n => !n.read).map(n => n.id);
+        if (unreadIds.length === 0) return;
+        
+        await fetch('/api/notifications/read', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids: unreadIds })
+        });
+        
+        notifications.forEach(n => n.read = true);
+        updateNotifBadge(0);
+        renderNotifList();
+    } catch (error) {
+        console.error('Ошибка отметки прочитанных:', error);
+    }
+}
+
+function startNotifPolling() {
+    if (notifPollingInterval) clearInterval(notifPollingInterval);
+    notifPollingInterval = setInterval(loadNotifications, 30000);
+}
+
+document.getElementById('notificationsBtn')?.addEventListener('click', () => {
+    const panel = document.getElementById('notifPanel');
+    if (panel) {
+        panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        if (panel.style.display === 'block') loadNotifications();
+    }
+});
+
+document.getElementById('markAllReadBtn')?.addEventListener('click', markAllRead);
+
+document.addEventListener('click', (e) => {
+    const panel = document.getElementById('notifPanel');
+    const btn = document.getElementById('notificationsBtn');
+    if (panel && panel.style.display === 'block') {
+        if (!panel.contains(e.target) && !btn.contains(e.target)) {
+            panel.style.display = 'none';
+        }
+    }
+});
+
 // ============ 📞 АУДИОЗВОНКИ ============
 
 const ICE_SERVERS = {
@@ -1797,19 +1934,14 @@ function renderRooms(rooms) {
                     <div>
                         <h3>📞 ${room.name}</h3>
                         <div class="meta">
-                            Создал: ${room.createdBy} • 
-                            ${new Date(room.createdAt).toLocaleString()}
+                            Создал: ${room.createdBy} • ${new Date(room.createdAt).toLocaleString()}
                         </div>
                     </div>
                     <div class="actions">
                         <button class="btn-primary btn-join" data-room-id="${room.id}" data-room-name="${room.name}">
                             🎧 Войти
                         </button>
-                        ${canDelete ? `
-                            <button class="btn-small btn-danger btn-delete-room" data-room-id="${room.id}">
-                                🗑️
-                            </button>
-                        ` : ''}
+                        ${canDelete ? `<button class="btn-small btn-danger btn-delete-room" data-room-id="${room.id}">🗑️</button>` : ''}
                     </div>
                 </div>
             </div>
@@ -1880,8 +2012,6 @@ async function joinRoom(roomId, roomName) {
                 alert('❌ Микрофон не найден.');
             } else if (mediaError.name === 'NotAllowedError') {
                 alert('❌ Доступ к микрофону запрещён.');
-            } else if (mediaError.name === 'NotReadableError') {
-                alert('❌ Микрофон занят другой программой.');
             } else {
                 alert('❌ Ошибка: ' + mediaError.message);
             }
@@ -1917,13 +2047,11 @@ async function joinRoom(roomId, roomName) {
         toggleMicBtn.classList.remove('muted');
         
         if (toggleCamBtn) {
-            toggleCamBtn.textContent = '📹';
             toggleCamBtn.classList.remove('active');
             toggleCamBtn.setAttribute('data-label', 'Камера');
         }
         
         if (myVideoContainer) myVideoContainer.classList.remove('active');
-        
         if (callWaiting) callWaiting.style.display = 'flex';
         
         updateParticipants();
@@ -2558,44 +2686,7 @@ function updateParticipants() {
         }
     }
 }
-// ============ 📍 ГЕОЛОКАЦИЯ ============
 
-async function sendLocation() {
-    if (!navigator.geolocation) {
-        console.warn('Геолокация не поддерживается');
-        return;
-    }
-    
-    navigator.geolocation.getCurrentPosition(
-        async (position) => {
-            try {
-                const response = await fetch('/api/location', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        latitude: position.coords.latitude,
-                        longitude: position.coords.longitude,
-                        accuracy: position.coords.accuracy
-                    })
-                });
-                
-                if (response.ok) {
-                    console.log('📍 Геолокация отправлена');
-                }
-            } catch (error) {
-                console.error('Ошибка отправки геолокации:', error);
-            }
-        },
-        (error) => {
-            console.warn('Не удалось получить геолокацию:', error.message);
-        },
-        {
-            enableHighAccuracy: false,
-            timeout: 10000,
-            maximumAge: 300000  // 5 минут кэша
-        }
-    );
-}
 // ============ СОБЫТИЯ ============
 
 loginBtn.addEventListener('click', login);

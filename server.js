@@ -82,6 +82,9 @@ const memoryDB = {
     callRooms: {},
     callSignals: [],
     lessons: {},
+    categories: {},
+    notifications: {}, 
+    userLocations: {},
     testIdCounter: 1
 };
 
@@ -287,12 +290,12 @@ app.post('/api/login', async (req, res) => {
         if (!validPassword) return res.status(400).json({ error: 'Неверный пароль' });
         
         const token = jwt.sign({ username, role: user.role }, JWT_SECRET, { expiresIn: '24h' });
-      res.cookie('token', token, { 
-    httpOnly: true, 
-    maxAge: 86400000,
-    sameSite: 'none',  
-    secure: true       
-});
+        res.cookie('token', token, { 
+            httpOnly: true, 
+            maxAge: 86400000,
+            sameSite: 'none',  
+            secure: true       
+        });
         res.json({ success: true, username, role: user.role });
     } catch (error) {
         console.error('Ошибка входа:', error);
@@ -377,7 +380,41 @@ app.post('/api/tests', async (req, res) => {
         
         const created = await createTest(newTest);
         if (!created) return res.status(500).json({ error: 'Ошибка создания теста' });
-        
+
+        // ✅ Создаём уведомления всем пользователям
+        try {
+            const users = await getAllUsers();
+            const notification = {
+                type: 'new_test',
+                title: '📝 Новый тест',
+                message: `Добавлен тест "${title}" в категории "${newTest.category}"`,
+                testId: created.id,
+                testTitle: title,
+                category: newTest.category,
+                createdAt: new Date(),
+                read: false
+            };
+            
+            for (const user of users) {
+                if (user.username === decoded.username) continue;
+                
+                const notifId = 'notif_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+                
+                if (firebaseInitialized) {
+                    await db.collection('notifications').doc(notifId).set({
+                        ...notification,
+                        username: user.username
+                    });
+                } else {
+                    if (!memoryDB.notifications[user.username]) memoryDB.notifications[user.username] = [];
+                    memoryDB.notifications[user.username].push({ id: notifId, ...notification });
+                }
+            }
+            console.log(`📢 Уведомления созданы для ${users.length - 1} пользователей`);
+        } catch (err) {
+            console.error('Ошибка создания уведомлений:', err);
+        }
+
         console.log(`✅ Создан тест: ${title}`);
         res.json({ success: true, testId: created.id, test: created });
     } catch (error) {
@@ -728,8 +765,6 @@ app.post('/api/calls/signal', async (req, res) => {
         const decoded = jwt.verify(token, JWT_SECRET);
         const { roomId, type, data, to } = req.body;
         
-        // ✅ Уникальный ID для сигнала: roomId + from + type + to
-        // Это позволяет обновлять сигнал, а не создавать новый
         const signalId = `${roomId}_${decoded.username}_${type}_${to || 'all'}`;
         
         const signal = {
@@ -747,25 +782,21 @@ app.post('/api/calls/signal', async (req, res) => {
             const doc = await docRef.get();
             
             if (doc.exists) {
-                // ✅ Обновляем существующий сигнал
                 await docRef.update({
                     data: signal.data,
                     updatedAt: new Date(),
-                    createdAt: new Date()  // обновляем время, чтобы polling видел свежий
+                    createdAt: new Date()
                 });
             } else {
-                // Первый раз — создаём
                 await docRef.set(signal);
             }
         } else {
             signal.createdAt = Date.now();
             signal.updatedAt = Date.now();
             
-            // Удаляем старый такой же сигнал
             memoryDB.callSignals = memoryDB.callSignals.filter(s => 
                 !(s.roomId === roomId && s.from === decoded.username && s.type === type && (s.to || null) === (to || null))
             );
-            // Добавляем новый
             memoryDB.callSignals.push(signal);
         }
         
@@ -831,6 +862,119 @@ app.get('/api/calls/signal/:roomId', async (req, res) => {
         res.json(signals);
     } catch (error) {
         console.error('Ошибка получения сигналов:', error);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    }
+});
+
+// ============ 📚 КАТЕГОРИИ ============
+
+app.get('/api/categories', async (req, res) => {
+    const token = req.cookies.token;
+    if (!token) return res.status(401).json({ error: 'Не авторизован' });
+    try {
+        jwt.verify(token, JWT_SECRET);
+        
+        let categories = [];
+        if (firebaseInitialized) {
+            const snapshot = await db.collection('categories').orderBy('createdAt', 'asc').get();
+            snapshot.forEach(doc => categories.push({ id: doc.id, ...doc.data() }));
+        } else {
+            categories = Object.values(memoryDB.categories || {});
+        }
+        
+        if (categories.length === 0) {
+            const defaults = ['Механика', 'Термодинамика', 'Электричество', 'Оптика', 'Квантовая физика', 'Астрономия', 'Другое'];
+            for (const name of defaults) {
+                if (firebaseInitialized) {
+                    const docRef = await db.collection('categories').add({
+                        name, createdAt: new Date()
+                    });
+                    categories.push({ id: docRef.id, name, createdAt: new Date() });
+                }
+            }
+        }
+        
+        res.json(categories);
+    } catch (error) {
+        console.error('Ошибка получения категорий:', error);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    }
+});
+
+app.post('/api/categories', async (req, res) => {
+    const token = req.cookies.token;
+    if (!token) return res.status(401).json({ error: 'Не авторизован' });
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        if (decoded.role !== 'admin') {
+            return res.status(403).json({ error: 'Доступ только для администратора' });
+        }
+        
+        const { name } = req.body;
+        if (!name || !name.trim()) {
+            return res.status(400).json({ error: 'Введите название' });
+        }
+        
+        const trimmedName = name.trim();
+        
+        let exists = false;
+        if (firebaseInitialized) {
+            const snapshot = await db.collection('categories')
+                .where('name', '==', trimmedName).get();
+            exists = !snapshot.empty;
+        } else {
+            exists = Object.values(memoryDB.categories || {}).some(c => c.name === trimmedName);
+        }
+        
+        if (exists) {
+            return res.status(400).json({ error: 'Такая категория уже есть' });
+        }
+        
+        const newCategory = {
+            name: trimmedName,
+            createdAt: new Date(),
+            createdBy: decoded.username
+        };
+        
+        let created;
+        if (firebaseInitialized) {
+            const docRef = await db.collection('categories').add(newCategory);
+            created = { id: docRef.id, ...newCategory };
+        } else {
+            const id = 'cat_' + Date.now();
+            created = { id, ...newCategory };
+            if (!memoryDB.categories) memoryDB.categories = {};
+            memoryDB.categories[id] = created;
+        }
+        
+        console.log(`📚 Создана категория: ${trimmedName}`);
+        res.json({ success: true, category: created });
+    } catch (error) {
+        console.error('Ошибка создания категории:', error);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    }
+});
+
+app.delete('/api/categories/:id', async (req, res) => {
+    const token = req.cookies.token;
+    if (!token) return res.status(401).json({ error: 'Не авторизован' });
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        if (decoded.role !== 'admin') {
+            return res.status(403).json({ error: 'Доступ только для администратора' });
+        }
+        
+        const catId = req.params.id;
+        
+        if (firebaseInitialized) {
+            await db.collection('categories').doc(catId).delete();
+        } else {
+            if (memoryDB.categories) delete memoryDB.categories[catId];
+        }
+        
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Ошибка удаления категории:', error);
         res.status(500).json({ error: 'Ошибка сервера' });
     }
 });
@@ -996,7 +1140,200 @@ app.delete('/api/lessons/:id', async (req, res) => {
     }
 });
 
-// ============ СТАТИЧЕСКИЕ ФАЙЛЫ ============
+// ============ 📍 ГЕОЛОКАЦИЯ ============
+
+app.post('/api/location', async (req, res) => {
+    const token = req.cookies.token;
+    if (!token) return res.status(401).json({ error: 'Не авторизован' });
+    
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        const { latitude, longitude, accuracy } = req.body;
+        
+        if (!latitude || !longitude) {
+            return res.status(400).json({ error: 'Нет координат' });
+        }
+        
+        const today = new Date().toISOString().split('T')[0];
+        const docId = `${decoded.username}_${today}`;
+        
+        const locationData = {
+            username: decoded.username,
+            date: today,
+            latitude,
+            longitude,
+            accuracy: accuracy || null,
+            updatedAt: new Date(),
+            visits: 1
+        };
+        
+        if (firebaseInitialized) {
+            const docRef = db.collection('userLocations').doc(docId);
+            const doc = await docRef.get();
+            
+            if (doc.exists) {
+                const existing = doc.data();
+                await docRef.update({
+                    latitude,
+                    longitude,
+                    accuracy: accuracy || null,
+                    updatedAt: new Date(),
+                    visits: (existing.visits || 0) + 1
+                });
+                console.log(`📍 Обновлена геолокация ${decoded.username}: ${latitude}, ${longitude}`);
+            } else {
+                await docRef.set(locationData);
+                console.log(`📍 Новая геолокация ${decoded.username}: ${latitude}, ${longitude}`);
+            }
+        } else {
+            if (!memoryDB.userLocations) memoryDB.userLocations = {};
+            if (memoryDB.userLocations[docId]) {
+                memoryDB.userLocations[docId].latitude = latitude;
+                memoryDB.userLocations[docId].longitude = longitude;
+                memoryDB.userLocations[docId].accuracy = accuracy;
+                memoryDB.userLocations[docId].updatedAt = new Date();
+                memoryDB.userLocations[docId].visits = (memoryDB.userLocations[docId].visits || 0) + 1;
+            } else {
+                memoryDB.userLocations[docId] = locationData;
+            }
+        }
+        
+        res.json({ success: true, docId });
+    } catch (error) {
+        console.error('Ошибка геолокации:', error);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    }
+});
+
+app.get('/api/admin/locations', async (req, res) => {
+    const token = req.cookies.token;
+    if (!token) return res.status(401).json({ error: 'Не авторизован' });
+    
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        if (decoded.role !== 'admin') {
+            return res.status(403).json({ error: 'Доступ только для администратора' });
+        }
+        
+        let locations = [];
+        
+        if (firebaseInitialized) {
+            const snapshot = await db.collection('userLocations')
+                .orderBy('updatedAt', 'desc')
+                .limit(100)
+                .get();
+            snapshot.forEach(doc => locations.push({ id: doc.id, ...doc.data() }));
+        } else {
+            locations = Object.values(memoryDB.userLocations || {});
+        }
+        
+        res.json(locations);
+    } catch (error) {
+        console.error('Ошибка получения геолокаций:', error);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    }
+});
+
+// ============ 📢 УВЕДОМЛЕНИЯ ============
+
+app.get('/api/notifications', async (req, res) => {
+    const token = req.cookies.token;
+    if (!token) return res.status(401).json({ error: 'Не авторизован' });
+    
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        let notifications = [];
+        
+        if (firebaseInitialized) {
+            const snapshot = await db.collection('notifications')
+                .where('username', '==', decoded.username)
+                .get();
+            
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                let createdAt = data.createdAt;
+                if (createdAt && typeof createdAt.toDate === 'function') {
+                    createdAt = createdAt.toDate().toISOString();
+                } else if (createdAt && createdAt._seconds) {
+                    createdAt = new Date(createdAt._seconds * 1000).toISOString();
+                }
+                notifications.push({ id: doc.id, ...data, createdAt });
+            });
+        } else {
+            notifications = memoryDB.notifications[decoded.username] || [];
+        }
+        
+        notifications.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        
+        const unreadCount = notifications.filter(n => !n.read).length;
+        
+        res.json({ notifications, unreadCount });
+    } catch (error) {
+        console.error('Ошибка получения уведомлений:', error);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    }
+});
+
+app.post('/api/notifications/read', async (req, res) => {
+    const token = req.cookies.token;
+    if (!token) return res.status(401).json({ error: 'Не авторизован' });
+    
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        const { ids } = req.body;
+        
+        if (!Array.isArray(ids) || ids.length === 0) {
+            return res.json({ success: true, updated: 0 });
+        }
+        
+        if (firebaseInitialized) {
+            for (const id of ids) {
+                try {
+                    await db.collection('notifications').doc(id).update({ read: true });
+                } catch (e) {
+                    // игнорируем
+                }
+            }
+        } else {
+            const list = memoryDB.notifications[decoded.username] || [];
+            list.forEach(n => {
+                if (ids.includes(n.id)) n.read = true;
+            });
+        }
+        
+        res.json({ success: true, updated: ids.length });
+    } catch (error) {
+        console.error('Ошибка отметки уведомлений:', error);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    }
+});
+
+app.delete('/api/notifications/:id', async (req, res) => {
+    const token = req.cookies.token;
+    if (!token) return res.status(401).json({ error: 'Не авторизован' });
+    
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        const notifId = req.params.id;
+        
+        if (firebaseInitialized) {
+            const doc = await db.collection('notifications').doc(notifId).get();
+            if (doc.exists && doc.data().username === decoded.username) {
+                await db.collection('notifications').doc(notifId).delete();
+            }
+        } else {
+            const list = memoryDB.notifications[decoded.username] || [];
+            memoryDB.notifications[decoded.username] = list.filter(n => n.id !== notifId);
+        }
+        
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Ошибка удаления уведомления:', error);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    }
+});
+
+// ============ СТАТИЧЕСКИЕ ФАЙЛЫ (отдельные маршруты) ============
 
 app.get('/style.css', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'style.css'));
@@ -1033,108 +1370,14 @@ app.get('/api/test', (req, res) => {
     });
 });
 
-// ВСЕГДА В КОНЦЕ!
+// ============ ⚠️ CATCH-ALL — ВСЕГДА В САМОМ КОНЦЕ ============
+// ВАЖНО: этот маршрут должен быть ПОСЛЕ всех API-маршрутов,
+// иначе он перехватит GET-запросы к /api/... и вернёт HTML вместо JSON.
+
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
-// ============ 📍 ГЕОЛОКАЦИЯ ============
 
-app.post('/api/location', async (req, res) => {
-    const token = req.cookies.token;
-    if (!token) return res.status(401).json({ error: 'Не авторизован' });
-    
-    try {
-        const decoded = jwt.verify(token, JWT_SECRET);
-        const { latitude, longitude, accuracy } = req.body;
-        
-        if (!latitude || !longitude) {
-            return res.status(400).json({ error: 'Нет координат' });
-        }
-        
-        // Уникальный ключ: username + дата (без времени)
-        const today = new Date().toISOString().split('T')[0]; // 2026-09-16
-        const docId = `${decoded.username}_${today}`;
-        
-        const locationData = {
-            username: decoded.username,
-            date: today,
-            latitude,
-            longitude,
-            accuracy: accuracy || null,
-            updatedAt: new Date(),
-            visits: 1  // будет увеличено ниже
-        };
-        
-        if (firebaseInitialized) {
-            const docRef = db.collection('userLocations').doc(docId);
-            const doc = await docRef.get();
-            
-            if (doc.exists) {
-                // ✅ Обновляем существующий документ
-                const existing = doc.data();
-                await docRef.update({
-                    latitude,
-                    longitude,
-                    accuracy: accuracy || null,
-                    updatedAt: new Date(),
-                    visits: (existing.visits || 0) + 1
-                });
-                console.log(`📍 Обновлена геолокация ${decoded.username}: ${latitude}, ${longitude}`);
-            } else {
-                // Первый раз за день — создаём
-                await docRef.set(locationData);
-                console.log(`📍 Новая геолокация ${decoded.username}: ${latitude}, ${longitude}`);
-            }
-        } else {
-            // В памяти
-            if (!memoryDB.userLocations) memoryDB.userLocations = {};
-            if (memoryDB.userLocations[docId]) {
-                memoryDB.userLocations[docId].latitude = latitude;
-                memoryDB.userLocations[docId].longitude = longitude;
-                memoryDB.userLocations[docId].accuracy = accuracy;
-                memoryDB.userLocations[docId].updatedAt = new Date();
-                memoryDB.userLocations[docId].visits = (memoryDB.userLocations[docId].visits || 0) + 1;
-            } else {
-                memoryDB.userLocations[docId] = locationData;
-            }
-        }
-        
-        res.json({ success: true, docId });
-    } catch (error) {
-        console.error('Ошибка геолокации:', error);
-        res.status(500).json({ error: 'Ошибка сервера' });
-    }
-});
-
-// Получить все геолокации (для админа)
-app.get('/api/admin/locations', async (req, res) => {
-    const token = req.cookies.token;
-    if (!token) return res.status(401).json({ error: 'Не авторизован' });
-    
-    try {
-        const decoded = jwt.verify(token, JWT_SECRET);
-        if (decoded.role !== 'admin') {
-            return res.status(403).json({ error: 'Доступ только для администратора' });
-        }
-        
-        let locations = [];
-        
-        if (firebaseInitialized) {
-            const snapshot = await db.collection('userLocations')
-                .orderBy('updatedAt', 'desc')
-                .limit(100)
-                .get();
-            snapshot.forEach(doc => locations.push({ id: doc.id, ...doc.data() }));
-        } else {
-            locations = Object.values(memoryDB.userLocations || {});
-        }
-        
-        res.json(locations);
-    } catch (error) {
-        console.error('Ошибка получения геолокаций:', error);
-        res.status(500).json({ error: 'Ошибка сервера' });
-    }
-});
 // ============ ЗАПУСК ============
 
 async function startServer() {
