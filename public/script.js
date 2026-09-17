@@ -7,7 +7,7 @@ let userAnswers = {};
 let currentTestId = null;
 let questionCounterAdmin = 0;
 let isEditFormOpen = false;
-
+import { LocalNotifications } from '@capacitor/local-notifications';
 // Таймер
 let timerInterval = null;
 let timeLeft = 0;
@@ -235,6 +235,7 @@ async function checkAuth() {
             loadMyResults();
             loadLeaderboard();
             loadNotifications();
+            requestNotificationPermission();
             startNotifPolling();
             if (currentRole === 'admin') loadStats();
             
@@ -1309,6 +1310,7 @@ async function login() {
             loadLeaderboard();
             loadNotifications();
             startNotifPolling();
+            requestNotificationPermission();
             if (currentRole === 'admin') loadStats();
             
             setTimeout(sendLocation, 1000);
@@ -1743,15 +1745,49 @@ async function sendLocation() {
 
 // ============ 📢 УВЕДОМЛЕНИЯ ============
 
+// Импортируйте плагин, если вы используете модульную систему
+// import { LocalNotifications } from '@capacitor/local-notifications';
+
+let lastNotifId = 0; // Чтобы не дублировать уведомления
+
 async function loadNotifications() {
     try {
         const response = await fetch('/api/notifications');
-        if (response.ok) {
-            const data = await response.json();
-            notifications = data.notifications || [];
-            updateNotifBadge(data.unreadCount || 0);
-            renderNotifList();
+        if (!response.ok) return;
+
+        const data = await response.json();
+        const currentNotifications = data.notifications || [];
+        
+        // Находим новые уведомления (которых не было раньше)
+        // Простой способ: сравнить по id или количеству
+        // В вашем случае можно проверять, есть ли непрочитанные
+        
+        // Пример: если есть непрочитанные уведомления, показываем последнее в шторке
+        const unread = currentNotifications.filter(n => !n.read);
+        
+        if (unread.length > 0 && unread[0].id !== lastNotifId) {
+            lastNotifId = unread[0].id;
+            
+            // Отправляем в системную шторку
+            await LocalNotifications.schedule({
+                notifications: [
+                    {
+                        title: unread[0].title || '📢 Уведомление',
+                        body: unread[0].message || '',
+                        id: Date.now(), // Уникальный ID для каждого показа
+                        schedule: { at: new Date(Date.now() + 100) }, // Показать почти сразу
+                        smallIcon: 'ic_stat_icon_config_sample', // Имя иконки (опционально)
+                        autoCancel: true // Уведомление исчезнет при нажатии
+                    }
+                ]
+            });
         }
+
+        // Обновляем внутренний интерфейс как раньше
+        notifications = currentNotifications;
+        updateNotifBadge(data.unreadCount || 0);
+        renderNotifList();
+
     } catch (error) {
         console.error('Ошибка загрузки уведомлений:', error);
     }
@@ -2664,6 +2700,16 @@ function handleLeave(peerUsername) {
     }
 }
 
+
+async function requestNotificationPermission() {
+  // Проверяем текущий статус
+  const status = await LocalNotifications.checkPermissions();
+  
+  // Если разрешение еще не выдано, запрашиваем
+  if (status.display !== 'granted') {
+    await LocalNotifications.requestPermissions();
+  }
+}
 function updateParticipants() {
     if (!participantsList) return;
     
