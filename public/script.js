@@ -55,6 +55,8 @@ let currentLessonId = null;
 
 // ============ 🔔 CAPACITOR PLUGINS (без require!) ============
 const LocalNotifications = window.Capacitor?.Plugins?.LocalNotifications;
+// ===== ДОБАВЛЕНО ДЛЯ PUSH =====
+const PushNotifications = window.Capacitor?.Plugins?.PushNotifications;
 const IS_MOBILE_DEVICE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
 // DOM элементы — авторизация
@@ -186,6 +188,66 @@ async function showSystemNotification(title, body, notifId) {
     }
 }
 
+// ===== ДОБАВЛЕНО ДЛЯ PUSH =====
+// ============ 📱 PUSH-УВЕДОМЛЕНИЯ (FCM) ============
+
+async function setupPushNotifications() {
+    if (!PushNotifications) {
+        console.warn('PushNotifications плагин недоступен');
+        return;
+    }
+
+    try {
+        // 1. Запрашиваем разрешение
+        let permStatus = await PushNotifications.checkPermissions();
+        if (permStatus.receive === 'prompt') {
+            permStatus = await PushNotifications.requestPermissions();
+        }
+        if (permStatus.receive !== 'granted') {
+            console.warn('Push-разрешение не получено');
+            return;
+        }
+
+        // 2. Регистрируемся в FCM
+        await PushNotifications.register();
+
+        // 3. Получаем токен устройства и отправляем на сервер
+        PushNotifications.addListener('registration', async (token) => {
+            console.log('📱 FCM Token:', token.value);
+            try {
+                await fetch('/api/push-token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token: token.value })
+                });
+                console.log('✅ Токен отправлен на сервер');
+            } catch (e) {
+                console.error('Ошибка отправки токена:', e);
+            }
+        });
+
+        // 4. Ошибки регистрации
+        PushNotifications.addListener('registrationError', (error) => {
+            console.error('Ошибка регистрации push:', error);
+        });
+
+        // 5. Уведомление пришло, когда приложение открыто
+        PushNotifications.addListener('pushNotificationReceived', (notification) => {
+            console.log('📩 Push получен:', notification);
+            loadNotifications();
+        });
+
+        // 6. Пользователь нажал на уведомление
+        PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
+            console.log('👆 Нажато на push:', notification);
+        });
+
+        console.log('✅ Push-уведомления настроены');
+    } catch (e) {
+        console.error('Ошибка настройки push:', e);
+    }
+}
+
 // ============ 🎨 ФОН С КВАДРАТИКАМИ ============
 function createSquares() {
     const container = document.getElementById('background-squares');
@@ -279,6 +341,8 @@ async function checkAuth() {
             if (currentRole === 'admin') loadStats();
             
             requestNotifPermission();
+            // ===== ДОБАВЛЕНО ДЛЯ PUSH =====
+            setupPushNotifications();
             setTimeout(sendLocation, 1000);
         } else {
             showAuthPage();
@@ -1353,6 +1417,8 @@ async function login() {
             if (currentRole === 'admin') loadStats();
             
             requestNotifPermission();
+            // ===== ДОБАВЛЕНО ДЛЯ PUSH =====
+            setupPushNotifications();
             setTimeout(sendLocation, 1000);
         } else {
             const data = await response.json();
@@ -1793,7 +1859,6 @@ async function loadNotifications() {
         const data = await response.json();
         const newNotifs = data.notifications || [];
         
-        // Показываем новые непрочитанные в шторке
         const unread = newNotifs.filter(n => !n.read);
         const lastShownId = localStorage.getItem('lastShownNotifId');
         

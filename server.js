@@ -8,6 +8,8 @@ const cors = require('cors');
 // ============ 🔥 FIREBASE ADMIN ============
 const { initializeApp, cert } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
+// ===== ДОБАВЛЕНО ДЛЯ PUSH =====
+const { getMessaging } = require('firebase-admin/messaging');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -28,6 +30,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 // ============ 🔥 ПОДКЛЮЧЕНИЕ К FIREBASE ============
 
 let db = null;
+let messaging = null; // ===== ДОБАВЛЕНО ДЛЯ PUSH =====
 let firebaseInitialized = false;
 
 function initFirebase() {
@@ -39,6 +42,7 @@ function initFirebase() {
                 credential: cert(serviceAccount)
             });
             db = getFirestore();
+            messaging = getMessaging(); // ===== ДОБАВЛЕНО ДЛЯ PUSH =====
             console.log('✅ Firebase подключен через serviceAccountKey.json');
             return true;
         }
@@ -61,6 +65,7 @@ function initFirebase() {
                 })
             });
             db = getFirestore();
+            messaging = getMessaging(); // ===== ДОБАВЛЕНО ДЛЯ PUSH =====
             console.log('✅ Firebase подключен через переменные окружения');
             return true;
         }
@@ -319,6 +324,39 @@ app.get('/api/me', (req, res) => {
     }
 });
 
+// ===== ДОБАВЛЕНО ДЛЯ PUSH =====
+// ============ 📱 PUSH-ТОКЕНЫ ============
+
+app.post('/api/push-token', async (req, res) => {
+    const token = req.cookies.token;
+    if (!token) return res.status(401).json({ error: 'Не авторизован' });
+    
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        const { token: fcmToken } = req.body;
+        
+        if (!fcmToken) return res.status(400).json({ error: 'Нет токена' });
+        
+        if (firebaseInitialized) {
+            await db.collection('users').doc(decoded.username).update({
+                fcmToken: fcmToken,
+                fcmUpdatedAt: new Date()
+            });
+        } else {
+            if (memoryDB.users[decoded.username]) {
+                memoryDB.users[decoded.username].fcmToken = fcmToken;
+                memoryDB.users[decoded.username].fcmUpdatedAt = new Date();
+            }
+        }
+        
+        console.log(`📱 Сохранён FCM-токен для ${decoded.username}`);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Ошибка сохранения токена:', error);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    }
+});
+
 // ============ ТЕСТЫ ============
 
 app.get('/api/tests', async (req, res) => {
@@ -411,6 +449,35 @@ app.post('/api/tests', async (req, res) => {
                 }
             }
             console.log(`📢 Уведомления созданы для ${users.length - 1} пользователей`);
+            
+            // ===== ДОБАВЛЕНО ДЛЯ PUSH =====
+            // Отправляем push-уведомления через FCM
+            if (messaging) {
+                for (const user of users) {
+                    if (user.username === decoded.username) continue;
+                    if (!user.fcmToken) continue;
+                    
+                    try {
+                        await messaging.send({
+                            token: user.fcmToken,
+                            notification: {
+                                title: '📝 Новый тест',
+                                body: `Добавлен тест "${title}" в категории "${newTest.category}"`
+                            },
+                            android: {
+                                priority: 'high',
+                                notification: {
+                                    channelId: 'default',
+                                    sound: 'default'
+                                }
+                            }
+                        });
+                        console.log(`📤 Push отправлен ${user.username}`);
+                    } catch (e) {
+                        console.error(`Ошибка push для ${user.username}:`, e.message);
+                    }
+                }
+            }
         } catch (err) {
             console.error('Ошибка создания уведомлений:', err);
         }
@@ -1366,7 +1433,8 @@ app.get('/admin', (req, res) => {
 app.get('/api/test', (req, res) => {
     res.json({ 
         status: 'ok', 
-        firebase: firebaseInitialized ? 'connected' : 'not connected'
+        firebase: firebaseInitialized ? 'connected' : 'not connected',
+        messaging: messaging ? 'ready' : 'not ready' // ===== ДОБАВЛЕНО ДЛЯ PUSH =====
     });
 });
 
@@ -1438,6 +1506,7 @@ async function startServer() {
                 console.log('\n⚠️ Данные хранятся в памяти!');
             } else {
                 console.log('✅ Данные сохраняются в Firebase');
+                console.log(`📱 Push-уведомления: ${messaging ? 'готовы' : 'не настроены'}`);
             }
         });
     }
