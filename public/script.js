@@ -7,7 +7,7 @@ let userAnswers = {};
 let currentTestId = null;
 let questionCounterAdmin = 0;
 let isEditFormOpen = false;
-import { LocalNotifications } from '@capacitor/local-notifications';
+
 // Таймер
 let timerInterval = null;
 let timeLeft = 0;
@@ -52,6 +52,10 @@ let audioAnalyzers = {};
 // Обучение
 let lessons = [];
 let currentLessonId = null;
+
+// ============ 🔔 CAPACITOR PLUGINS (без require!) ============
+const LocalNotifications = window.Capacitor?.Plugins?.LocalNotifications;
+const IS_MOBILE_DEVICE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
 // DOM элементы — авторизация
 const authPage = document.getElementById('authPage');
@@ -146,6 +150,42 @@ const screenShareContainer = document.getElementById('screenShareContainer');
 const screenShareVideo = document.getElementById('screenShareVideo');
 const screenShareInfo = document.getElementById('screenShareInfo');
 
+// Скрыть демонстрацию экрана на мобильных (WebView не поддерживает getDisplayMedia)
+if (IS_MOBILE_DEVICE && shareScreenBtn) {
+    shareScreenBtn.style.display = 'none';
+}
+
+// ============ 🔔 СИСТЕМНЫЕ УВЕДОМЛЕНИЯ (шторка) ============
+
+async function requestNotifPermission() {
+    if (!LocalNotifications) return;
+    try {
+        const status = await LocalNotifications.checkPermissions();
+        if (status.display !== 'granted') {
+            await LocalNotifications.requestPermissions();
+        }
+    } catch (e) {
+        console.warn('LocalNotifications недоступен:', e);
+    }
+}
+
+async function showSystemNotification(title, body, notifId) {
+    if (!LocalNotifications) return;
+    try {
+        await LocalNotifications.schedule({
+            notifications: [{
+                title: title || '📢 Уведомление',
+                body: body || '',
+                id: notifId || Math.floor(Math.random() * 100000),
+                schedule: { at: new Date(Date.now() + 100) },
+                autoCancel: true
+            }]
+        });
+    } catch (e) {
+        console.warn('Не удалось показать системное уведомление:', e);
+    }
+}
+
 // ============ 🎨 ФОН С КВАДРАТИКАМИ ============
 function createSquares() {
     const container = document.getElementById('background-squares');
@@ -235,10 +275,10 @@ async function checkAuth() {
             loadMyResults();
             loadLeaderboard();
             loadNotifications();
-            requestNotificationPermission();
             startNotifPolling();
             if (currentRole === 'admin') loadStats();
             
+            requestNotifPermission();
             setTimeout(sendLocation, 1000);
         } else {
             showAuthPage();
@@ -1310,9 +1350,9 @@ async function login() {
             loadLeaderboard();
             loadNotifications();
             startNotifPolling();
-            requestNotificationPermission();
             if (currentRole === 'admin') loadStats();
             
+            requestNotifPermission();
             setTimeout(sendLocation, 1000);
         } else {
             const data = await response.json();
@@ -1745,49 +1785,30 @@ async function sendLocation() {
 
 // ============ 📢 УВЕДОМЛЕНИЯ ============
 
-// Импортируйте плагин, если вы используете модульную систему
-// import { LocalNotifications } from '@capacitor/local-notifications';
-
-let lastNotifId = 0; // Чтобы не дублировать уведомления
-
 async function loadNotifications() {
     try {
         const response = await fetch('/api/notifications');
         if (!response.ok) return;
-
+        
         const data = await response.json();
-        const currentNotifications = data.notifications || [];
+        const newNotifs = data.notifications || [];
         
-        // Находим новые уведомления (которых не было раньше)
-        // Простой способ: сравнить по id или количеству
-        // В вашем случае можно проверять, есть ли непрочитанные
+        // Показываем новые непрочитанные в шторке
+        const unread = newNotifs.filter(n => !n.read);
+        const lastShownId = localStorage.getItem('lastShownNotifId');
         
-        // Пример: если есть непрочитанные уведомления, показываем последнее в шторке
-        const unread = currentNotifications.filter(n => !n.read);
-        
-        if (unread.length > 0 && unread[0].id !== lastNotifId) {
-            lastNotifId = unread[0].id;
-            
-            // Отправляем в системную шторку
-            await LocalNotifications.schedule({
-                notifications: [
-                    {
-                        title: unread[0].title || '📢 Уведомление',
-                        body: unread[0].message || '',
-                        id: Date.now(), // Уникальный ID для каждого показа
-                        schedule: { at: new Date(Date.now() + 100) }, // Показать почти сразу
-                        smallIcon: 'ic_stat_icon_config_sample', // Имя иконки (опционально)
-                        autoCancel: true // Уведомление исчезнет при нажатии
-                    }
-                ]
-            });
+        if (unread.length > 0 && unread[0].id !== lastShownId) {
+            localStorage.setItem('lastShownNotifId', unread[0].id);
+            await showSystemNotification(
+                unread[0].title || '📝 Новый тест',
+                unread[0].message || '',
+                Math.floor(Math.random() * 100000)
+            );
         }
-
-        // Обновляем внутренний интерфейс как раньше
-        notifications = currentNotifications;
+        
+        notifications = newNotifs;
         updateNotifBadge(data.unreadCount || 0);
         renderNotifList();
-
     } catch (error) {
         console.error('Ошибка загрузки уведомлений:', error);
     }
@@ -1851,7 +1872,6 @@ function startNotifPolling() {
     notifPollingInterval = setInterval(loadNotifications, 30000);
 }
 
-// Открытие/закрытие панели уведомлений
 document.getElementById('notificationsBtn')?.addEventListener('click', (e) => {
     e.stopPropagation();
     const panel = document.getElementById('notifPanel');
@@ -1865,7 +1885,6 @@ document.getElementById('notificationsBtn')?.addEventListener('click', (e) => {
 
 document.getElementById('markAllReadBtn')?.addEventListener('click', markAllRead);
 
-// Закрытие по клику вне панели
 document.addEventListener('click', (e) => {
     const panel = document.getElementById('notifPanel');
     const btn = document.getElementById('notificationsBtn');
@@ -1876,7 +1895,6 @@ document.addEventListener('click', (e) => {
     }
 });
 
-// Закрытие по Escape
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
         document.getElementById('notifPanel')?.classList.remove('open');
@@ -2700,16 +2718,6 @@ function handleLeave(peerUsername) {
     }
 }
 
-
-async function requestNotificationPermission() {
-  // Проверяем текущий статус
-  const status = await LocalNotifications.checkPermissions();
-  
-  // Если разрешение еще не выдано, запрашиваем
-  if (status.display !== 'granted') {
-    await LocalNotifications.requestPermissions();
-  }
-}
 function updateParticipants() {
     if (!participantsList) return;
     
