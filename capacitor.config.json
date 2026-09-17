@@ -1,1 +1,1 @@
-﻿{"appId":"com.romabull.physics","appName":"Mrnerd","webDir":"public","server":{"url":"https://mrnerd.vercel.app","cleartext":false,"androidScheme":"https"},"android":{"allowMixedContent":true,"captureInput":true,"webContentsDebuggingEnabled":true}}
+﻿{"appId":"com.mrnerd.physics","appName":"Mrnerd","webDir":"public","server":{"url":"https://mrnerd.vercel.app","cleartext":false,"androidScheme":"https"},"android":{"allowMixedContent":true,"captureInput":true,"webContentsDebuggingEnabled":true}}
