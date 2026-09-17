@@ -40,20 +40,11 @@
                 <div class="header-content">
                     <h1>🔬 Платформа тестирования</h1>
                     <div class="user-info">
-                        <!-- 🔔 Уведомления -->
-                        <div style="position: relative;">
-                            <button id="notificationsBtn" style="background: none; border: none; font-size: 22px; cursor: pointer; position: relative; padding: 5px 10px;">
-                                🔔
-                                <span id="notifBadge" style="display: none; position: absolute; top: 0; right: 0; background: #fc8181; color: white; border-radius: 50%; min-width: 18px; height: 18px; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; padding: 0 4px;"></span>
-                            </button>
-                            <div id="notifPanel" style="display: none; position: absolute; top: 100%; right: 0; width: 320px; max-height: 400px; overflow-y: auto; background: white; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.15); z-index: 1000; padding: 8px;">
-                                <div style="padding: 10px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
-                                    <strong>🔔 Уведомления</strong>
-                                    <button id="markAllReadBtn" style="background: none; border: none; color: #667eea; cursor: pointer; font-size: 13px;">Прочитать все</button>
-                                </div>
-                                <div id="notifList"></div>
-                            </div>
-                        </div>
+                        <!-- 🔔 Кнопка уведомлений -->
+                        <button id="notificationsBtn" class="notif-btn">
+                            🔔
+                            <span id="notifBadge" class="notif-badge"></span>
+                        </button>
                         <span id="currentUser"></span>
                         <span id="userRole" class="role-tag"></span>
                         <button id="logoutBtn" class="btn-small">Выйти</button>
@@ -378,6 +369,15 @@
         </div>
 
         <div id="remoteAudios"></div>
+    </div>
+
+    <!-- 🔔 Панель уведомлений (вне header, чтобы fixed работал корректно) -->
+    <div id="notifPanel" class="notif-panel">
+        <div class="notif-header">
+            <strong>🔔 Уведомления</strong>
+            <button id="markAllReadBtn">Прочитать все</button>
+        </div>
+        <div id="notifList" class="notif-list"></div>
     </div>
 
     <script src="script.js"></script>

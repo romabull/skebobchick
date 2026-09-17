@@ -238,7 +238,6 @@ async function checkAuth() {
             startNotifPolling();
             if (currentRole === 'admin') loadStats();
             
-            // ✅ Отправляем геолокацию
             setTimeout(sendLocation, 1000);
         } else {
             showAuthPage();
@@ -1764,9 +1763,9 @@ function updateNotifBadge(count) {
     
     if (count > 0) {
         badge.textContent = count > 99 ? '99+' : count;
-        badge.style.display = 'block';
+        badge.classList.add('show');
     } else {
-        badge.style.display = 'none';
+        badge.classList.remove('show');
     }
 }
 
@@ -1775,19 +1774,21 @@ function renderNotifList() {
     if (!list) return;
     
     if (notifications.length === 0) {
-        list.innerHTML = '<p style="text-align: center; padding: 20px; color: #718096;">Нет уведомлений</p>';
+        list.innerHTML = '<div class="notif-empty">📭 Нет уведомлений</div>';
         return;
     }
     
     list.innerHTML = notifications.map(n => `
-        <div style="padding: 12px; border-radius: 8px; margin-bottom: 6px; background: ${n.read ? '#fff' : '#ebf4ff'}; border-left: 3px solid ${n.read ? '#cbd5e0' : '#667eea'};">
-            <div style="font-weight: 600; color: #2d3748; font-size: 14px;">${n.title || '📢 Уведомление'}</div>
-            <div style="color: #4a5568; font-size: 13px; margin: 4px 0;">${n.message || ''}</div>
-            <div style="color: #a0aec0; font-size: 11px;">
+        <div class="notif-item ${n.read ? '' : 'unread'}">
+            <div class="notif-item-title">${n.title || '📢 Уведомление'}</div>
+            <div class="notif-item-msg">${n.message || ''}</div>
+            <div class="notif-item-date">
                 ${n.createdAt ? new Date(n.createdAt).toLocaleString() : ''}
             </div>
         </div>
     `).join('');
+    
+    list.scrollTop = 0;
 }
 
 async function markAllRead() {
@@ -1814,23 +1815,35 @@ function startNotifPolling() {
     notifPollingInterval = setInterval(loadNotifications, 30000);
 }
 
-document.getElementById('notificationsBtn')?.addEventListener('click', () => {
+// Открытие/закрытие панели уведомлений
+document.getElementById('notificationsBtn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
     const panel = document.getElementById('notifPanel');
-    if (panel) {
-        panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-        if (panel.style.display === 'block') loadNotifications();
-    }
+    if (!panel) return;
+    
+    const isOpen = panel.classList.contains('open');
+    panel.classList.toggle('open', !isOpen);
+    
+    if (!isOpen) loadNotifications();
 });
 
 document.getElementById('markAllReadBtn')?.addEventListener('click', markAllRead);
 
+// Закрытие по клику вне панели
 document.addEventListener('click', (e) => {
     const panel = document.getElementById('notifPanel');
     const btn = document.getElementById('notificationsBtn');
-    if (panel && panel.style.display === 'block') {
-        if (!panel.contains(e.target) && !btn.contains(e.target)) {
-            panel.style.display = 'none';
-        }
+    if (!panel || !panel.classList.contains('open')) return;
+    
+    if (!panel.contains(e.target) && !btn.contains(e.target)) {
+        panel.classList.remove('open');
+    }
+});
+
+// Закрытие по Escape
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        document.getElementById('notifPanel')?.classList.remove('open');
     }
 });
 
