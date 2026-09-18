@@ -54,8 +54,6 @@ let lessons = [];
 let currentLessonId = null;
 
 // ============ 🔔 CAPACITOR PLUGINS ============
-// Оставлен только LocalNotifications для показа уведомлений из JS.
-// PushNotifications удалён — push обрабатывает нативный MyFirebaseMessagingService.
 const LocalNotifications = window.Capacitor?.Plugins?.LocalNotifications;
 const IS_MOBILE_DEVICE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
@@ -700,6 +698,88 @@ function renderLessonLinkedTests(selectedIds = []) {
             <small style="color: #718096; margin-left: auto;">${t.category || 'Другое'}</small>
         </label>
     `).join('');
+}
+
+// ===== ДОБАВЛЕНО: РЕДАКТОР ФОРМУЛ =====
+
+function addFormulaEditor(value = '') {
+    const container = document.getElementById('formulasList');
+    if (!container) return;
+    
+    const safeValue = String(value || '').replace(/"/g, '&quot;');
+    
+    const html = `
+        <div class="formula-editor" style="display: flex; gap: 10px; margin-bottom: 8px; align-items: flex-start;">
+            <input type="text" class="formula-input" value="${safeValue}" 
+                   placeholder="Например: F = m · a" 
+                   style="flex: 1; padding: 10px 14px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 15px; font-family: 'Courier New', monospace;">
+            <button type="button" class="btn-small btn-danger remove-formula" 
+                    style="padding: 8px 14px; font-size: 14px;" 
+                    onclick="this.parentElement.remove()">✕</button>
+        </div>
+    `;
+    container.insertAdjacentHTML('beforeend', html);
+}
+
+function renderFormulaEditors(formulas = []) {
+    const container = document.getElementById('formulasList');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    
+    if (!formulas || formulas.length === 0) {
+        addFormulaEditor('');
+    } else {
+        formulas.forEach(f => addFormulaEditor(f));
+    }
+}
+
+// ===== ДОБАВЛЕНО: РЕДАКТОР ПРИМЕРОВ =====
+
+function addExampleEditor(value = '') {
+    const container = document.getElementById('examplesList');
+    if (!container) return;
+    
+    const num = container.children.length + 1;
+    const safeValue = String(value || '');
+    
+    const html = `
+        <div class="example-editor" style="position: relative; margin-bottom: 12px; background: #f7fafc; border-radius: 10px; padding: 15px; border: 2px solid #e2e8f0;">
+            <div style="position: absolute; top: -10px; left: 15px; background: #38b2ac; color: white; padding: 2px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;">
+                Пример ${num}
+            </div>
+            <textarea class="example-input" 
+                      placeholder="Задача: Тело массой 5 кг движется со скоростью 10 м/с. Найдите кинетическую энергию.&#10;&#10;Решение: E = mv²/2 = 5 · 100 / 2 = 250 Дж" 
+                      style="width: 100%; padding: 12px 14px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 15px; min-height: 100px; resize: vertical; font-family: 'Segoe UI', sans-serif; box-sizing: border-box;">${safeValue}</textarea>
+            <button type="button" class="btn-small btn-danger remove-example" 
+                    style="margin-top: 10px; padding: 6px 14px; font-size: 13px;" 
+                    onclick="this.parentElement.remove(); renumberExamples();">✕ Удалить пример</button>
+        </div>
+    `;
+    container.insertAdjacentHTML('beforeend', html);
+}
+
+function renumberExamples() {
+    const container = document.getElementById('examplesList');
+    if (!container) return;
+    
+    [...container.children].forEach((el, index) => {
+        const badge = el.querySelector('div');
+        if (badge) badge.textContent = `Пример ${index + 1}`;
+    });
+}
+
+function renderExampleEditors(examples = []) {
+    const container = document.getElementById('examplesList');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    
+    if (!examples || examples.length === 0) {
+        addExampleEditor('');
+    } else {
+        examples.forEach(ex => addExampleEditor(ex));
+    }
 }
 
 // ============ ДОБАВЛЕНИЕ ВОПРОСА ============
@@ -1583,7 +1663,7 @@ function showLesson(lesson) {
             <div style="background: linear-gradient(135deg, #e6fffa 0%, #b2f5ea 100%); border-left: 5px solid #38b2ac; padding: 25px; border-radius: 15px; margin: 30px 0;">
                 <h3 style="color: #234e52; margin: 0 0 18px; font-size: 1.3em;">💡 Примеры решения задач</h3>
                 ${lesson.examples.map((ex, i) => `
-                    <div style="padding: 15px; background: white; border-radius: 10px; margin-bottom: 10px; color: #234e52; line-height: 1.6;">
+                    <div style="padding: 15px; background: white; border-radius: 10px; margin-bottom: 10px; color: #234e52; line-height: 1.6; white-space: pre-wrap;">
                         <strong style="color: #2c7a7b;">Пример ${i + 1}.</strong> ${ex}
                     </div>
                 `).join('')}
@@ -1666,8 +1746,10 @@ function editLesson(id) {
     document.getElementById('lessonTitle').value = lesson.title || '';
     document.getElementById('lessonCategory').value = lesson.category || 'Другое';
     document.getElementById('lessonContentInput').value = lesson.content || '';
-    document.getElementById('lessonFormulas').value = (lesson.formulas || []).join('\n');
-    document.getElementById('lessonExamples').value = (lesson.examples || []).join('\n');
+    
+    // ===== ДОБАВЛЕНО: загружаем формулы и примеры в редакторы =====
+    renderFormulaEditors(lesson.formulas || []);
+    renderExampleEditors(lesson.examples || []);
     
     renderLessonLinkedTests(lesson.linkedTestIds || []);
     
@@ -1682,6 +1764,10 @@ function showLessonEditor() {
     editorTitle.textContent = '📝 Создать статью';
     lessonForm.reset();
     document.getElementById('lessonId').value = '';
+    
+    // ===== ДОБАВЛЕНО: пустые редакторы =====
+    renderFormulaEditors([]);
+    renderExampleEditors([]);
     
     renderLessonLinkedTests([]);
     
@@ -1703,6 +1789,15 @@ document.getElementById('cancelLessonBtn')?.addEventListener('click', backToLess
 lessonSearch?.addEventListener('input', renderLessons);
 lessonCategoryFilter?.addEventListener('change', renderLessons);
 
+// ===== ДОБАВЛЕНО: кнопки добавления формул и примеров =====
+document.getElementById('addFormulaBtn')?.addEventListener('click', () => {
+    addFormulaEditor('');
+});
+
+document.getElementById('addExampleBtn')?.addEventListener('click', () => {
+    addExampleEditor('');
+});
+
 lessonForm?.addEventListener('submit', async (e) => {
     e.preventDefault();
     
@@ -1710,10 +1805,15 @@ lessonForm?.addEventListener('submit', async (e) => {
     const title = document.getElementById('lessonTitle').value.trim();
     const category = document.getElementById('lessonCategory').value;
     const content = document.getElementById('lessonContentInput').value.trim();
-    const formulas = document.getElementById('lessonFormulas').value
-        .split('\n').map(f => f.trim()).filter(f => f);
-    const examples = document.getElementById('lessonExamples').value
-        .split('\n').map(ex => ex.trim()).filter(ex => ex);
+    
+    // ===== ИЗМЕНЕНО: собираем формулы и примеры из редакторов =====
+    const formulas = [...document.querySelectorAll('#formulasList .formula-input')]
+        .map(input => input.value.trim())
+        .filter(f => f);
+    
+    const examples = [...document.querySelectorAll('#examplesList .example-input')]
+        .map(textarea => textarea.value.trim())
+        .filter(ex => ex);
     
     if (!title || !content) {
         alert('Заполните заголовок и содержание');
@@ -1793,22 +1893,19 @@ async function loadNotifications() {
         if (!response.ok) return;
         
         const data = await response.json();
-        const newNotifs = data.notifications || [];
+        const feed = data.notifications || [];
         
-        const unread = newNotifs.filter(n => !n.read);
-        const lastShownId = localStorage.getItem('lastShownNotifId');
+        // Читаем прочитанные из localStorage
+        const readIds = JSON.parse(localStorage.getItem('readNotifIds') || '[]');
         
-        if (unread.length > 0 && unread[0].id !== lastShownId) {
-            localStorage.setItem('lastShownNotifId', unread[0].id);
-            await showSystemNotification(
-                unread[0].title || '📝 Новый тест',
-                unread[0].message || '',
-                Math.floor(Math.random() * 100000)
-            );
-        }
+        // Помечаем прочитанность
+        notifications = feed.map(n => ({
+            ...n,
+            read: readIds.includes(n.id)
+        }));
         
-        notifications = newNotifs;
-        updateNotifBadge(data.unreadCount || 0);
+        const unreadCount = notifications.filter(n => !n.read).length;
+        updateNotifBadge(unreadCount);
         renderNotifList();
     } catch (error) {
         console.error('Ошибка загрузки уведомлений:', error);
@@ -1851,14 +1948,11 @@ function renderNotifList() {
 
 async function markAllRead() {
     try {
-        const unreadIds = notifications.filter(n => !n.read).map(n => n.id);
-        if (unreadIds.length === 0) return;
+        const readIds = JSON.parse(localStorage.getItem('readNotifIds') || '[]');
+        const newReadIds = [...new Set([...readIds, ...notifications.map(n => n.id)])];
         
-        await fetch('/api/notifications/read', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ids: unreadIds })
-        });
+        const trimmed = newReadIds.slice(-200);
+        localStorage.setItem('readNotifIds', JSON.stringify(trimmed));
         
         notifications.forEach(n => n.read = true);
         updateNotifBadge(0);

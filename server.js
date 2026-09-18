@@ -8,12 +8,16 @@ const cors = require('cors');
 // ============ 🔥 FIREBASE ADMIN ============
 const { initializeApp, cert } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
-// ===== ДОБАВЛЕНО ДЛЯ PUSH =====
 const { getMessaging } = require('firebase-admin/messaging');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'physics_platform_secret_2026';
+
+// ============ 🧹 АВТООЧИСТКА ============
+const CLEANUP_HOUR_MSK = 12;
+const MSK_OFFSET_HOURS = 3;
+let cleanupInterval = null;
 
 // Middleware
 app.use(express.json({ limit: '10mb' }));
@@ -30,7 +34,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 // ============ 🔥 ПОДКЛЮЧЕНИЕ К FIREBASE ============
 
 let db = null;
-let messaging = null; // ===== ДОБАВЛЕНО ДЛЯ PUSH =====
+let messaging = null;
 let firebaseInitialized = false;
 
 function initFirebase() {
@@ -42,7 +46,7 @@ function initFirebase() {
                 credential: cert(serviceAccount)
             });
             db = getFirestore();
-            messaging = getMessaging(); // ===== ДОБАВЛЕНО ДЛЯ PUSH =====
+            messaging = getMessaging();
             console.log('✅ Firebase подключен через serviceAccountKey.json');
             return true;
         }
@@ -65,7 +69,7 @@ function initFirebase() {
                 })
             });
             db = getFirestore();
-            messaging = getMessaging(); // ===== ДОБАВЛЕНО ДЛЯ PUSH =====
+            messaging = getMessaging();
             console.log('✅ Firebase подключен через переменные окружения');
             return true;
         }
@@ -88,7 +92,7 @@ const memoryDB = {
     callSignals: [],
     lessons: {},
     categories: {},
-    notifications: {}, 
+    notificationFeed: [],
     userLocations: {},
     testIdCounter: 1
 };
@@ -324,7 +328,6 @@ app.get('/api/me', (req, res) => {
     }
 });
 
-// ===== ДОБАВЛЕНО ДЛЯ PUSH =====
 // ============ 📱 PUSH-ТОКЕНЫ ============
 
 app.post('/api/push-token', async (req, res) => {
@@ -419,40 +422,47 @@ app.post('/api/tests', async (req, res) => {
         const created = await createTest(newTest);
         if (!created) return res.status(500).json({ error: 'Ошибка создания теста' });
 
-        // ✅ Создаём уведомления всем пользователям
+        // ✅ Одно общее уведомление в одном документе
         try {
-            const users = await getAllUsers();
+            const notificationId = 'notif_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
             const notification = {
+                id: notificationId,
                 type: 'new_test',
                 title: '📝 Новый тест',
                 message: `Добавлен тест "${title}" в категории "${newTest.category}"`,
                 testId: created.id,
                 testTitle: title,
                 category: newTest.category,
-                createdAt: new Date(),
-                read: false
+                createdAt: new Date()
             };
             
-            for (const user of users) {
-                if (user.username === decoded.username) continue;
+            if (firebaseInitialized) {
+                const feedRef = db.collection('notification_feed').doc('current');
+                const feedDoc = await feedRef.get();
                 
-                const notifId = 'notif_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
-                
-                if (firebaseInitialized) {
-                    await db.collection('notifications').doc(notifId).set({
-                        ...notification,
-                        username: user.username
-                    });
-                } else {
-                    if (!memoryDB.notifications[user.username]) memoryDB.notifications[user.username] = [];
-                    memoryDB.notifications[user.username].push({ id: notifId, ...notification });
+                let feed = [];
+                if (feedDoc.exists) {
+                    feed = feedDoc.data().items || [];
                 }
+                
+                feed.unshift(notification);
+                feed = feed.slice(0, 20);
+                
+                await feedRef.set({
+                    items: feed,
+                    updatedAt: new Date()
+                });
+            } else {
+                if (!memoryDB.notificationFeed) memoryDB.notificationFeed = [];
+                memoryDB.notificationFeed.unshift(notification);
+                memoryDB.notificationFeed = memoryDB.notificationFeed.slice(0, 20);
             }
-            console.log(`📢 Уведомления созданы для ${users.length - 1} пользователей`);
             
-            // ===== ДОБАВЛЕНО ДЛЯ PUSH =====
-            // Отправляем push-уведомления через FCM
+            console.log(`📢 Уведомление создано: ${title}`);
+            
+            // Push через FCM
             if (messaging) {
+                const users = await getAllUsers();
                 for (const user of users) {
                     if (user.username === decoded.username) continue;
                     if (!user.fcmToken) continue;
@@ -479,7 +489,7 @@ app.post('/api/tests', async (req, res) => {
                 }
             }
         } catch (err) {
-            console.error('Ошибка создания уведомлений:', err);
+            console.error('Ошибка создания уведомления:', err);
         }
 
         console.log(`✅ Создан тест: ${title}`);
@@ -1235,6 +1245,18 @@ app.post('/api/location', async (req, res) => {
         };
         
         if (firebaseInitialized) {
+            // ✅ Удаляем все старые локации этого пользователя
+            const oldDocs = await db.collection('userLocations')
+                .where('username', '==', decoded.username)
+                .get();
+            
+            for (const doc of oldDocs.docs) {
+                if (doc.id !== docId) {
+                    await doc.ref.delete();
+                }
+            }
+            
+            // ✅ Пишем/обновляем сегодняшнюю
             const docRef = db.collection('userLocations').doc(docId);
             const doc = await docRef.get();
             
@@ -1254,6 +1276,13 @@ app.post('/api/location', async (req, res) => {
             }
         } else {
             if (!memoryDB.userLocations) memoryDB.userLocations = {};
+            
+            for (const key of Object.keys(memoryDB.userLocations)) {
+                if (memoryDB.userLocations[key].username === decoded.username && key !== docId) {
+                    delete memoryDB.userLocations[key];
+                }
+            }
+            
             if (memoryDB.userLocations[docId]) {
                 memoryDB.userLocations[docId].latitude = latitude;
                 memoryDB.userLocations[docId].longitude = longitude;
@@ -1308,33 +1337,22 @@ app.get('/api/notifications', async (req, res) => {
     if (!token) return res.status(401).json({ error: 'Не авторизован' });
     
     try {
-        const decoded = jwt.verify(token, JWT_SECRET);
-        let notifications = [];
+        jwt.verify(token, JWT_SECRET);
+        
+        let feed = [];
         
         if (firebaseInitialized) {
-            const snapshot = await db.collection('notifications')
-                .where('username', '==', decoded.username)
-                .get();
-            
-            snapshot.forEach(doc => {
-                const data = doc.data();
-                let createdAt = data.createdAt;
-                if (createdAt && typeof createdAt.toDate === 'function') {
-                    createdAt = createdAt.toDate().toISOString();
-                } else if (createdAt && createdAt._seconds) {
-                    createdAt = new Date(createdAt._seconds * 1000).toISOString();
-                }
-                notifications.push({ id: doc.id, ...data, createdAt });
-            });
+            const feedDoc = await db.collection('notification_feed').doc('current').get();
+            if (feedDoc.exists) {
+                feed = feedDoc.data().items || [];
+            }
         } else {
-            notifications = memoryDB.notifications[decoded.username] || [];
+            feed = memoryDB.notificationFeed || [];
         }
         
-        notifications.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        feed.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         
-        const unreadCount = notifications.filter(n => !n.read).length;
-        
-        res.json({ notifications, unreadCount });
+        res.json({ notifications: feed, unreadCount: 0 });
     } catch (error) {
         console.error('Ошибка получения уведомлений:', error);
         res.status(500).json({ error: 'Ошибка сервера' });
@@ -1342,65 +1360,212 @@ app.get('/api/notifications', async (req, res) => {
 });
 
 app.post('/api/notifications/read', async (req, res) => {
-    const token = req.cookies.token;
-    if (!token) return res.status(401).json({ error: 'Не авторизован' });
-    
-    try {
-        const decoded = jwt.verify(token, JWT_SECRET);
-        const { ids } = req.body;
-        
-        if (!Array.isArray(ids) || ids.length === 0) {
-            return res.json({ success: true, updated: 0 });
-        }
-        
-        if (firebaseInitialized) {
-            for (const id of ids) {
-                try {
-                    await db.collection('notifications').doc(id).update({ read: true });
-                } catch (e) {
-                    // игнорируем
-                }
-            }
-        } else {
-            const list = memoryDB.notifications[decoded.username] || [];
-            list.forEach(n => {
-                if (ids.includes(n.id)) n.read = true;
-            });
-        }
-        
-        res.json({ success: true, updated: ids.length });
-    } catch (error) {
-        console.error('Ошибка отметки уведомлений:', error);
-        res.status(500).json({ error: 'Ошибка сервера' });
-    }
+    // Прочитанность хранится в localStorage у пользователя
+    res.json({ success: true, updated: 0 });
 });
 
 app.delete('/api/notifications/:id', async (req, res) => {
-    const token = req.cookies.token;
-    if (!token) return res.status(401).json({ error: 'Не авторизован' });
-    
-    try {
-        const decoded = jwt.verify(token, JWT_SECRET);
-        const notifId = req.params.id;
-        
-        if (firebaseInitialized) {
-            const doc = await db.collection('notifications').doc(notifId).get();
-            if (doc.exists && doc.data().username === decoded.username) {
-                await db.collection('notifications').doc(notifId).delete();
-            }
-        } else {
-            const list = memoryDB.notifications[decoded.username] || [];
-            memoryDB.notifications[decoded.username] = list.filter(n => n.id !== notifId);
-        }
-        
-        res.json({ success: true });
-    } catch (error) {
-        console.error('Ошибка удаления уведомления:', error);
-        res.status(500).json({ error: 'Ошибка сервера' });
-    }
+    res.json({ success: true });
 });
 
-// ============ СТАТИЧЕСКИЕ ФАЙЛЫ (отдельные маршруты) ============
+// ============ 🧹 ЕЖЕДНЕВНАЯ ОЧИСТКА В 12:00 МСК ============
+
+async function runCleanup() {
+    console.log('🧹 Запуск автоочистки...');
+    const now = Date.now();
+    const oneHourAgo = now - 60 * 60 * 1000;
+    const oneDayAgo = now - 24 * 60 * 60 * 1000;
+    const today = new Date().toISOString().split('T')[0];
+    
+    try {
+        // ===== 1. СИГНАЛЫ старше 1 часа =====
+        let signalsDeleted = 0;
+        if (firebaseInitialized) {
+            const signals = await db.collection('callSignals').get();
+            for (const doc of signals.docs) {
+                const s = doc.data();
+                let createdAt = s.createdAt;
+                if (createdAt && typeof createdAt.toDate === 'function') {
+                    createdAt = createdAt.toDate().getTime();
+                } else if (createdAt && createdAt._seconds) {
+                    createdAt = createdAt._seconds * 1000;
+                } else if (typeof createdAt === 'number') {
+                    // уже число
+                } else {
+                    createdAt = now;
+                }
+                if (createdAt < oneHourAgo) {
+                    await doc.ref.delete();
+                    signalsDeleted++;
+                }
+            }
+        } else {
+            const before = memoryDB.callSignals.length;
+            memoryDB.callSignals = memoryDB.callSignals.filter(s => s.updatedAt > oneHourAgo);
+            signalsDeleted = before - memoryDB.callSignals.length;
+        }
+        console.log(`   ✅ Сигналов удалено: ${signalsDeleted}`);
+        
+        // ===== 2. УВЕДОМЛЕНИЯ — старше 1 дня, максимум 20 =====
+        let notifsDeleted = 0;
+        if (firebaseInitialized) {
+            const feedRef = db.collection('notification_feed').doc('current');
+            const feedDoc = await feedRef.get();
+            
+            if (feedDoc.exists) {
+                const feed = feedDoc.data().items || [];
+                const filtered = feed.filter(n => {
+                    const t = new Date(n.createdAt).getTime();
+                    return t > oneDayAgo;
+                }).slice(0, 20);
+                
+                notifsDeleted = feed.length - filtered.length;
+                
+                await feedRef.set({
+                    items: filtered,
+                    updatedAt: new Date()
+                });
+            }
+            
+            // Чистим старые отдельные уведомления (на случай, если остались)
+            const oldNotifs = await db.collection('notifications').get();
+            for (const doc of oldNotifs.docs) {
+                await doc.ref.delete();
+                notifsDeleted++;
+            }
+        } else {
+            const feed = memoryDB.notificationFeed || [];
+            const filtered = feed.filter(n => {
+                const t = new Date(n.createdAt).getTime();
+                return t > oneDayAgo;
+            }).slice(0, 20);
+            notifsDeleted = feed.length - filtered.length;
+            memoryDB.notificationFeed = filtered;
+        }
+        console.log(`   ✅ Уведомлений удалено: ${notifsDeleted}`);
+        
+        // ===== 3. ЛОКАЦИИ — всё, кроме сегодняшней =====
+        let locationsDeleted = 0;
+        if (firebaseInitialized) {
+            const locations = await db.collection('userLocations').get();
+            
+            const byUser = {};
+            for (const doc of locations.docs) {
+                const l = doc.data();
+                if (!byUser[l.username]) byUser[l.username] = [];
+                byUser[l.username].push({ id: doc.id, ...l, ref: doc.ref });
+            }
+            
+            for (const username of Object.keys(byUser)) {
+                const userLocs = byUser[username];
+                const todayLocs = userLocs.filter(l => l.date === today);
+                const toDelete = userLocs.filter(l => l.date !== today);
+                
+                if (todayLocs.length > 1) {
+                    todayLocs.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+                    for (let i = 1; i < todayLocs.length; i++) {
+                        toDelete.push(todayLocs[i]);
+                    }
+                }
+                
+                for (const loc of toDelete) {
+                    await loc.ref.delete();
+                    locationsDeleted++;
+                }
+            }
+        } else {
+            const byUser = {};
+            for (const key of Object.keys(memoryDB.userLocations || {})) {
+                const l = memoryDB.userLocations[key];
+                if (!byUser[l.username]) byUser[l.username] = [];
+                byUser[l.username].push({ key, ...l });
+            }
+            
+            for (const username of Object.keys(byUser)) {
+                const userLocs = byUser[username];
+                const todayLocs = userLocs.filter(l => l.date === today);
+                const toDelete = userLocs.filter(l => l.date !== today);
+                
+                if (todayLocs.length > 1) {
+                    todayLocs.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+                    for (let i = 1; i < todayLocs.length; i++) {
+                        toDelete.push(todayLocs[i]);
+                    }
+                }
+                
+                for (const loc of toDelete) {
+                    delete memoryDB.userLocations[loc.key];
+                    locationsDeleted++;
+                }
+            }
+        }
+        console.log(`   ✅ Локаций удалено: ${locationsDeleted}`);
+        
+        // ===== 4. КОМНАТЫ старше 24 часов =====
+        let roomsDeleted = 0;
+        if (firebaseInitialized) {
+            const rooms = await db.collection('callRooms').get();
+            for (const doc of rooms.docs) {
+                const r = doc.data();
+                let createdAt = r.createdAt;
+                if (createdAt && typeof createdAt.toDate === 'function') {
+                    createdAt = createdAt.toDate().getTime();
+                } else if (createdAt && createdAt._seconds) {
+                    createdAt = createdAt._seconds * 1000;
+                } else {
+                    createdAt = now;
+                }
+                if (createdAt < oneDayAgo) {
+                    await doc.ref.delete();
+                    roomsDeleted++;
+                    const sigs = await db.collection('callSignals').where('roomId', '==', doc.id).get();
+                    for (const s of sigs.docs) await s.ref.delete();
+                }
+            }
+        } else {
+            for (const roomId of Object.keys(memoryDB.callRooms || {})) {
+                const r = memoryDB.callRooms[roomId];
+                const t = new Date(r.createdAt).getTime();
+                if (t < oneDayAgo) {
+                    delete memoryDB.callRooms[roomId];
+                    memoryDB.callSignals = memoryDB.callSignals.filter(s => s.roomId !== roomId);
+                    roomsDeleted++;
+                }
+            }
+        }
+        console.log(`   ✅ Комнат удалено: ${roomsDeleted}`);
+        
+        console.log('🧹 Автоочистка завершена');
+    } catch (err) {
+        console.error('❌ Ошибка автоочистки:', err);
+    }
+}
+
+function scheduleCleanup() {
+    if (cleanupInterval) clearInterval(cleanupInterval);
+    
+    cleanupInterval = setInterval(async () => {
+        const now = new Date();
+        const utcHour = now.getUTCHours();
+        const utcMinute = now.getUTCMinutes();
+        const mskHour = (utcHour + MSK_OFFSET_HOURS) % 24;
+        
+        // 12:00 МСК = 09:00 UTC
+        if (mskHour === CLEANUP_HOUR_MSK && utcMinute === 0) {
+            const lastRun = global.__lastCleanupRun;
+            const today = now.toISOString().split('T')[0];
+            if (lastRun === today) return;
+            global.__lastCleanupRun = today;
+            
+            console.log(`⏰ 12:00 МСК — запуск ежедневной очистки`);
+            await runCleanup();
+        }
+    }, 60 * 1000);
+    
+    console.log(`⏰ Автоочистка запланирована на 12:00 МСК (09:00 UTC) каждый день`);
+}
+
+// ============ СТАТИЧЕСКИЕ ФАЙЛЫ ============
 
 app.get('/style.css', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'style.css'));
@@ -1434,13 +1599,9 @@ app.get('/api/test', (req, res) => {
     res.json({ 
         status: 'ok', 
         firebase: firebaseInitialized ? 'connected' : 'not connected',
-        messaging: messaging ? 'ready' : 'not ready' // ===== ДОБАВЛЕНО ДЛЯ PUSH =====
+        messaging: messaging ? 'ready' : 'not ready'
     });
 });
-
-// ============ ⚠️ CATCH-ALL — ВСЕГДА В САМОМ КОНЦЕ ============
-// ВАЖНО: этот маршрут должен быть ПОСЛЕ всех API-маршрутов,
-// иначе он перехватит GET-запросы к /api/... и вернёт HTML вместо JSON.
 
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
@@ -1494,6 +1655,15 @@ async function startServer() {
         });
         console.log('✅ Тестовый тест создан');
     }
+    
+    // 🧹 Запускаем автоочистку
+    scheduleCleanup();
+    
+    // Первичная очистка через 5 секунд
+    setTimeout(() => {
+        console.log('🧹 Первичная очистка при старте...');
+        runCleanup().catch(err => console.error('Ошибка первичной очистки:', err));
+    }, 5000);
     
     if (process.env.NODE_ENV !== 'production') {
         app.listen(PORT, () => {
