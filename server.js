@@ -19,12 +19,15 @@ const CLEANUP_HOUR_MSK = 12;
 const MSK_OFFSET_HOURS = 3;
 let cleanupInterval = null;
 
+// 🔥 Определяем, работаем ли на Vercel
+const IS_VERCEL = !!process.env.VERCEL || process.env.NODE_ENV === 'production';
+
 // Middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 app.use(cors({
-    origin: process.env.NODE_ENV === 'production' ? false : '*',
+    origin: IS_VERCEL ? false : '*',
     credentials: true
 }));
 
@@ -51,7 +54,7 @@ function initFirebase() {
             return true;
         }
     } catch (error) {
-        console.log('⚠️ Не удалось подключиться через serviceAccountKey.json');
+        console.log('⚠️ Не удалось подключиться через serviceAccountKey.json:', error.message);
     }
 
     try {
@@ -299,11 +302,13 @@ app.post('/api/login', async (req, res) => {
         if (!validPassword) return res.status(400).json({ error: 'Неверный пароль' });
         
         const token = jwt.sign({ username, role: user.role }, JWT_SECRET, { expiresIn: '24h' });
+        
+        // 🔥 Cookie: на Vercel — sameSite:none + secure, локально — lax
         res.cookie('token', token, { 
             httpOnly: true, 
             maxAge: 86400000,
-            sameSite: 'none',  
-            secure: true       
+            sameSite: IS_VERCEL ? 'none' : 'lax',
+            secure: IS_VERCEL
         });
         res.json({ success: true, username, role: user.role });
     } catch (error) {
@@ -422,7 +427,7 @@ app.post('/api/tests', async (req, res) => {
         const created = await createTest(newTest);
         if (!created) return res.status(500).json({ error: 'Ошибка создания теста' });
 
-        // ✅ Одно общее уведомление в одном документе
+        // Уведомление
         try {
             const notificationId = 'notif_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
             const notification = {
@@ -460,7 +465,6 @@ app.post('/api/tests', async (req, res) => {
             
             console.log(`📢 Уведомление создано: ${title}`);
             
-            // Push через FCM
             if (messaging) {
                 const users = await getAllUsers();
                 for (const user of users) {
@@ -1245,7 +1249,6 @@ app.post('/api/location', async (req, res) => {
         };
         
         if (firebaseInitialized) {
-            // ✅ Удаляем все старые локации этого пользователя
             const oldDocs = await db.collection('userLocations')
                 .where('username', '==', decoded.username)
                 .get();
@@ -1256,7 +1259,6 @@ app.post('/api/location', async (req, res) => {
                 }
             }
             
-            // ✅ Пишем/обновляем сегодняшнюю
             const docRef = db.collection('userLocations').doc(docId);
             const doc = await docRef.get();
             
@@ -1360,7 +1362,6 @@ app.get('/api/notifications', async (req, res) => {
 });
 
 app.post('/api/notifications/read', async (req, res) => {
-    // Прочитанность хранится в localStorage у пользователя
     res.json({ success: true, updated: 0 });
 });
 
@@ -1368,7 +1369,7 @@ app.delete('/api/notifications/:id', async (req, res) => {
     res.json({ success: true });
 });
 
-// ============ 🧹 ЕЖЕДНЕВНАЯ ОЧИСТКА В 12:00 МСК ============
+// ============ 🧹 ЕЖЕДНЕВНАЯ ОЧИСТКА ============
 
 async function runCleanup() {
     console.log('🧹 Запуск автоочистки...');
@@ -1406,7 +1407,7 @@ async function runCleanup() {
         }
         console.log(`   ✅ Сигналов удалено: ${signalsDeleted}`);
         
-        // ===== 2. УВЕДОМЛЕНИЯ — старше 1 дня, максимум 20 =====
+        // ===== 2. УВЕДОМЛЕНИЯ =====
         let notifsDeleted = 0;
         if (firebaseInitialized) {
             const feedRef = db.collection('notification_feed').doc('current');
@@ -1427,7 +1428,6 @@ async function runCleanup() {
                 });
             }
             
-            // Чистим старые отдельные уведомления (на случай, если остались)
             const oldNotifs = await db.collection('notifications').get();
             for (const doc of oldNotifs.docs) {
                 await doc.ref.delete();
@@ -1444,7 +1444,7 @@ async function runCleanup() {
         }
         console.log(`   ✅ Уведомлений удалено: ${notifsDeleted}`);
         
-        // ===== 3. ЛОКАЦИИ — всё, кроме сегодняшней =====
+        // ===== 3. ЛОКАЦИИ =====
         let locationsDeleted = 0;
         if (firebaseInitialized) {
             const locations = await db.collection('userLocations').get();
@@ -1501,7 +1501,7 @@ async function runCleanup() {
         }
         console.log(`   ✅ Локаций удалено: ${locationsDeleted}`);
         
-        // ===== 4. КОМНАТЫ старше 24 часов =====
+        // ===== 4. КОМНАТЫ =====
         let roomsDeleted = 0;
         if (firebaseInitialized) {
             const rooms = await db.collection('callRooms').get();
@@ -1542,6 +1542,12 @@ async function runCleanup() {
 }
 
 function scheduleCleanup() {
+    // 🔥 На Vercel setInterval НЕ работает (serverless)
+    if (IS_VERCEL) {
+        console.log('⏰ Автоочистка отключена (Vercel / production)');
+        return;
+    }
+    
     if (cleanupInterval) clearInterval(cleanupInterval);
     
     cleanupInterval = setInterval(async () => {
@@ -1550,7 +1556,6 @@ function scheduleCleanup() {
         const utcMinute = now.getUTCMinutes();
         const mskHour = (utcHour + MSK_OFFSET_HOURS) % 24;
         
-        // 12:00 МСК = 09:00 UTC
         if (mskHour === CLEANUP_HOUR_MSK && utcMinute === 0) {
             const lastRun = global.__lastCleanupRun;
             const today = now.toISOString().split('T')[0];
@@ -1599,7 +1604,8 @@ app.get('/api/test', (req, res) => {
     res.json({ 
         status: 'ok', 
         firebase: firebaseInitialized ? 'connected' : 'not connected',
-        messaging: messaging ? 'ready' : 'not ready'
+        messaging: messaging ? 'ready' : 'not ready',
+        vercel: IS_VERCEL
     });
 });
 
@@ -1607,65 +1613,82 @@ app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// ============ ЗАПУСК ============
+// ============ 🔥 ЗАПУСК (РАБОТАЕТ И ЛОКАЛЬНО, И НА VERCEL) ============
 
-async function startServer() {
-    const adminExists = await getUser('admin');
-    if (!adminExists) {
-        const hashedPassword = await bcrypt.hash('admin123', 10);
-        await createUser('admin', hashedPassword, 'admin');
-        console.log('✅ Создан администратор: admin / admin123');
-    }
-    
-    const userExists = await getUser('user');
-    if (!userExists) {
-        const hashedPassword = await bcrypt.hash('user123', 10);
-        await createUser('user', hashedPassword, 'user');
-        console.log('✅ Создан пользователь: user / user123');
-    }
-    
-    const existingTests = await getTests();
-    if (existingTests.length === 0) {
-        const testQuestions = [
-            {
-                type: 'choice',
-                question: 'Какая формула используется для расчета скорости?',
-                options: ['v = s/t', 'v = t/s', 'v = s*t', 'v = s/t²'],
-                correct: 0,
-                hint: 'Скорость = расстояние / время'
-            },
-            {
-                type: 'input',
-                question: 'В каких единицах измеряется скорость в системе СИ? (напишите сокращённо)',
-                options: [],
-                correctText: 'м/с',
-                hint: 'Метр в секунду'
-            }
-        ];
+async function initializeData() {
+    try {
+        const adminExists = await getUser('admin');
+        if (!adminExists) {
+            const hashedPassword = await bcrypt.hash('admin123', 10);
+            await createUser('admin', hashedPassword, 'admin');
+            console.log('✅ Создан администратор: admin / admin123');
+        }
         
-        await createTest({
-            title: 'Основы физики',
-            description: 'Тест по основным формулам и понятиям физики',
-            class: '7-8',
-            category: 'Механика',
-            timeLimit: 10,
-            questions: testQuestions,
-            linkedLessonIds: [],
-            createdBy: 'admin'
-        });
-        console.log('✅ Тестовый тест создан');
+        const userExists = await getUser('user');
+        if (!userExists) {
+            const hashedPassword = await bcrypt.hash('user123', 10);
+            await createUser('user', hashedPassword, 'user');
+            console.log('✅ Создан пользователь: user / user123');
+        }
+        
+        const existingTests = await getTests();
+        if (existingTests.length === 0) {
+            const testQuestions = [
+                {
+                    type: 'choice',
+                    question: 'Какая формула используется для расчета скорости?',
+                    options: ['v = s/t', 'v = t/s', 'v = s*t', 'v = s/t²'],
+                    correct: 0,
+                    hint: 'Скорость = расстояние / время'
+                },
+                {
+                    type: 'input',
+                    question: 'В каких единицах измеряется скорость в системе СИ? (напишите сокращённо)',
+                    options: [],
+                    correctText: 'м/с',
+                    hint: 'Метр в секунду'
+                }
+            ];
+            
+            await createTest({
+                title: 'Основы физики',
+                description: 'Тест по основным формулам и понятиям физики',
+                class: '7-8',
+                category: 'Механика',
+                timeLimit: 10,
+                questions: testQuestions,
+                linkedLessonIds: [],
+                createdBy: 'admin'
+            });
+            console.log('✅ Тестовый тест создан');
+        }
+    } catch (err) {
+        console.error('❌ Ошибка инициализации данных:', err);
     }
+}
+
+// 🔥 Главная логика
+if (IS_VERCEL) {
+    // ============ VERCEL ============
+    // НЕ вызываем app.listen()! Просто экспортируем app.
+    // Инициализация данных при холодном старте (без блокировки)
+    initializeData().catch(err => console.error('Init error:', err));
     
-    // 🧹 Запускаем автоочистку
-    scheduleCleanup();
+    // Автоочистка отключена (см. scheduleCleanup)
     
-    // Первичная очистка через 5 секунд
-    setTimeout(() => {
-        console.log('🧹 Первичная очистка при старте...');
-        runCleanup().catch(err => console.error('Ошибка первичной очистки:', err));
-    }, 5000);
-    
-    if (process.env.NODE_ENV !== 'production') {
+    module.exports = app;
+    console.log('🚀 Server запущен на Vercel (serverless)');
+} else {
+    // ============ ЛОКАЛЬНО / VPS ============
+    (async () => {
+        await initializeData();
+        scheduleCleanup();
+        
+        setTimeout(() => {
+            console.log('🧹 Первичная очистка при старте...');
+            runCleanup().catch(err => console.error('Ошибка первичной очистки:', err));
+        }, 5000);
+        
         app.listen(PORT, () => {
             console.log(`\n🚀 Сервер запущен на http://localhost:${PORT}`);
             console.log('\n👤 Доступные аккаунты:');
@@ -1679,11 +1702,5 @@ async function startServer() {
                 console.log(`📱 Push-уведомления: ${messaging ? 'готовы' : 'не настроены'}`);
             }
         });
-    }
+    })();
 }
-
-if (process.env.NODE_ENV === 'production') {
-    module.exports = app;
-}
-
-startServer();
