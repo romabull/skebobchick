@@ -1,0 +1,1883 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>🎨 Редактор карты и городов</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: #0a0a2a;
+    color: #e2e8f0;
+    height: 100vh;
+    display: flex;
+    overflow: hidden;
+}
+
+#sidebar {
+    width: 320px;
+    background: #1a1a2e;
+    display: flex;
+    flex-direction: column;
+    border-right: 2px solid #2d3748;
+    flex-shrink: 0;
+    height: 100vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+#sidebar::-webkit-scrollbar { width: 10px; }
+#sidebar::-webkit-scrollbar-track { background: #0f0f1e; }
+#sidebar::-webkit-scrollbar-thumb {
+    background: #4a5568;
+    border-radius: 5px;
+    border: 2px solid #1a1a2e;
+}
+#sidebar::-webkit-scrollbar-thumb:hover { background: #667eea; }
+
+#sidebar h2 {
+    padding: 12px 15px;
+    font-size: 15px;
+    background: #16213e;
+    border-bottom: 2px solid #2d3748;
+    color: #667eea;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.section {
+    padding: 10px 15px;
+    border-bottom: 1px solid #2d3748;
+    flex-shrink: 0;
+}
+
+.section h3 {
+    font-size: 12px;
+    color: #a0aec0;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.mode-tabs {
+    display: flex;
+    gap: 6px;
+    padding: 10px 15px;
+    background: #0f0f1e;
+    border-bottom: 2px solid #2d3748;
+    flex-shrink: 0;
+}
+
+.mode-tab {
+    flex: 1;
+    padding: 10px 8px;
+    background: #2d3748;
+    color: #e2e8f0;
+    border: 2px solid transparent;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.2s;
+    text-align: center;
+}
+
+.mode-tab:hover { background: #4a5568; }
+.mode-tab.active {
+    background: #667eea;
+    border-color: #fbbf24;
+}
+
+.tools {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+}
+.tools .tool-btn:nth-child(2) {
+    grid-column: span 2;
+}
+
+.tool-btn {
+    padding: 8px;
+    background: #2d3748;
+    color: #e2e8f0;
+    border: 2px solid transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s;
+}
+
+.tool-btn:hover { background: #4a5568; }
+.tool-btn.active {
+    background: #667eea;
+    border-color: #fbbf24;
+    font-weight: 600;
+}
+
+#countryList {
+    padding: 8px;
+    flex-shrink: 0;
+}
+
+.country-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    margin-bottom: 3px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+    border: 2px solid transparent;
+    font-size: 12px;
+}
+
+.country-item:hover { background: #2d3748; }
+.country-item.active {
+    background: #667eea;
+    border-color: #fbbf24;
+    font-weight: 600;
+}
+
+.country-item .flag { font-size: 16px; width: 22px; text-align: center; }
+.country-item .name { flex: 1; }
+.country-item .count {
+    font-size: 10px;
+    color: #a0aec0;
+    background: rgba(0,0,0,0.3);
+    padding: 2px 5px;
+    border-radius: 8px;
+}
+
+.country-item[data-country="water"] {
+    border-top: 2px solid #2d3748;
+    margin-top: 8px;
+    padding-top: 10px;
+}
+.country-item[data-country="water"] .name {
+    color: #63b3ed;
+    font-style: italic;
+}
+
+#cityList {
+    padding: 8px;
+    flex-shrink: 0;
+}
+
+.city-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    margin-bottom: 4px;
+    border-radius: 6px;
+    cursor: pointer;
+    border: 2px solid transparent;
+    font-size: 12px;
+    background: #0f0f1e;
+    transition: all 0.15s;
+}
+
+.city-item:hover { background: #2d3748; }
+.city-item.active {
+    background: #667eea;
+    border-color: #fbbf24;
+}
+
+.city-item .capital { color: #fbbf24; font-size: 14px; }
+.city-item .port { color: #38bdf8; font-size: 14px; }
+.city-item .name { flex: 1; font-weight: 600; }
+.city-item .level {
+    font-size: 10px;
+    background: rgba(0,0,0,0.4);
+    padding: 2px 5px;
+    border-radius: 8px;
+    color: #fbbf24;
+}
+.city-item .hexes {
+    font-size: 10px;
+    color: #a0aec0;
+}
+
+.city-item .actions {
+    display: flex;
+    gap: 4px;
+}
+
+.city-item .actions button {
+    background: transparent;
+    border: none;
+    color: #a0aec0;
+    cursor: pointer;
+    font-size: 13px;
+    padding: 2px 4px;
+    border-radius: 4px;
+}
+
+.city-item .actions button:hover {
+    background: rgba(255,255,255,0.1);
+    color: white;
+}
+
+.actions {
+    padding: 10px 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    border-top: 2px solid #2d3748;
+    background: #16213e;
+    flex-shrink: 0;
+}
+
+.btn {
+    padding: 9px 15px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.2s;
+}
+
+.btn-primary { background: #667eea; color: white; }
+.btn-primary:hover { background: #5a67d8; }
+.btn-success { background: #48bb78; color: white; }
+.btn-success:hover { background: #38a169; }
+.btn-danger { background: #fc8181; color: white; }
+.btn-danger:hover { background: #f56565; }
+.btn-secondary { background: #4a5568; color: white; }
+.btn-secondary:hover { background: #2d3748; }
+.btn-warning { background: #ed8936; color: white; }
+.btn-warning:hover { background: #dd6b20; }
+
+#main {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    background: #0f0f1e;
+}
+
+#viewport {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+}
+
+#canvasWrapper {
+    position: absolute;
+    transform-origin: 0 0;
+}
+
+#bgImage {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    user-select: none;
+    opacity: 0.5;
+}
+
+#hexCanvas {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    cursor: crosshair;
+}
+
+#infoBar {
+    position: absolute;
+    top: 15px;
+    left: 15px;
+    background: rgba(0,0,0,0.85);
+    backdrop-filter: blur(10px);
+    padding: 10px 16px;
+    border-radius: 10px;
+    font-size: 12px;
+    display: flex;
+    gap: 16px;
+    border: 1px solid rgba(255,255,255,0.1);
+    flex-wrap: wrap;
+    max-width: calc(100% - 30px);
+}
+
+#infoBar span { color: #a0aec0; }
+#infoBar b { color: #fbbf24; }
+
+#zoomControls {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    background: rgba(0,0,0,0.7);
+    padding: 8px;
+    border-radius: 10px;
+}
+
+#zoomControls button {
+    width: 40px;
+    height: 40px;
+    border: none;
+    background: #2d3748;
+    color: white;
+    font-size: 18px;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+
+#zoomControls button:hover { background: #667eea; }
+
+.modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-overlay.show { display: flex; }
+
+.modal {
+    background: #1a1a2e;
+    padding: 25px;
+    border-radius: 15px;
+    max-width: 480px;
+    width: 90%;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+    border: 2px solid #2d3748;
+}
+
+.modal h2 {
+    color: #667eea;
+    margin-bottom: 18px;
+    font-size: 18px;
+}
+
+.modal label {
+    display: block;
+    color: #a0aec0;
+    font-size: 13px;
+    margin-bottom: 5px;
+    margin-top: 12px;
+}
+
+.modal input[type="text"],
+.modal input[type="number"] {
+    width: 100%;
+    padding: 10px 12px;
+    background: #0f0f1e;
+    border: 2px solid #2d3748;
+    color: #e2e8f0;
+    border-radius: 8px;
+    font-size: 14px;
+}
+
+.modal input:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+.modal .level-picker {
+    display: flex;
+    gap: 6px;
+    margin-top: 5px;
+}
+
+.modal .level-picker button {
+    flex: 1;
+    padding: 10px;
+    background: #2d3748;
+    color: #e2e8f0;
+    border: 2px solid transparent;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.15s;
+}
+
+.modal .level-picker button:hover { background: #4a5568; }
+.modal .level-picker button.active {
+    background: #667eea;
+    border-color: #fbbf24;
+}
+
+.modal .checkboxes {
+    display: flex;
+    gap: 20px;
+    margin-top: 12px;
+}
+
+.modal .checkboxes label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    cursor: pointer;
+    font-size: 14px;
+    color: #e2e8f0;
+}
+
+.modal .checkboxes input {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+.modal .buttons {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 20px;
+}
+
+.modal .buttons button {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.hidden { display: none !important; }
+
+#citiesPanel {
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+}
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+    <h2>🎨 Редактор карты</h2>
+
+    <div class="mode-tabs">
+        <button class="mode-tab active" data-mode="map" id="modeMap">🗺️ Карта</button>
+        <button class="mode-tab" data-mode="cities" id="modeCities">🏙️ Города</button>
+    </div>
+
+    <div class="section">
+        <h3>Инструменты</h3>
+        <div class="tools">
+            <button class="tool-btn active" data-tool="brush" id="toolBrush">🖌️ Кисть</button>
+            <button class="tool-btn" data-tool="rect" id="toolRect">⬛ Прямоугольник</button>
+            <button class="tool-btn" data-tool="eraser" id="toolEraser">🧽 Ластик</button>
+            <button class="tool-btn" data-tool="picker" id="toolPicker">💉 Пипетка</button>
+            <button class="tool-btn" data-tool="pan" id="toolPan">✋ Рука</button>
+        </div>
+    </div>
+
+    <div class="section" style="padding: 8px 15px;">
+        <h3 style="margin-bottom: 4px;">Фон</h3>
+        <input type="file" id="imageInput" accept="image/*" style="font-size: 12px; color: #a0aec0; width: 100%;">
+    </div>
+
+    <div class="section" style="padding: 8px 15px;">
+        <h3 style="margin-bottom: 4px;">Размер гекса</h3>
+        <input type="range" id="hexSizeSlider" min="4" max="20" value="10" style="width: 100%;">
+        <div style="font-size: 11px; color: #a0aec0; text-align: center; margin-top: 4px;">
+            <span id="hexSizeValue">10</span> px
+        </div>
+    </div>
+
+    <div id="mapPanel" class="section" style="padding: 8px 15px; border-bottom: none;">
+        <h3>Страна / Вода</h3>
+    </div>
+    <div id="countryList"></div>
+
+    <div id="citiesPanel" class="hidden">
+        <div class="section" style="padding: 8px 15px;">
+            <h3>Страна для городов</h3>
+            <select id="cityCountrySelect" style="width: 100%; padding: 8px; background: #0f0f1e; color: #e2e8f0; border: 2px solid #2d3748; border-radius: 8px; font-size: 13px;">
+                <option value="">— Выберите страну —</option>
+            </select>
+        </div>
+        <div style="padding: 8px 15px; display: flex; gap: 6px; flex-shrink: 0;">
+            <button class="btn btn-primary" id="addCityBtn" style="flex: 1; padding: 8px; font-size: 12px;">+ Город</button>
+            <button class="btn btn-warning" id="assignHexesBtn" style="flex: 1; padding: 8px; font-size: 12px;">🖌️ Кисть</button>
+        </div>
+        <div id="cityList"></div>
+    </div>
+
+    <div class="actions">
+        <button class="btn btn-success" id="saveBtn">💾 Сохранить game-map.js</button>
+        <button class="btn btn-secondary" id="loadBtn">📂 Загрузить game-map.js</button>
+        <button class="btn btn-danger" id="resetBtn">🗑️ Сбросить всё</button>
+    </div>
+
+    <input type="file" id="loadInput" accept=".js" style="display: none;">
+</div>
+
+<div id="main">
+    <div id="viewport">
+        <div id="canvasWrapper">
+            <img id="bgImage" style="display: none;">
+            <canvas id="hexCanvas"></canvas>
+        </div>
+    </div>
+
+    <div id="infoBar">
+        <span>Режим: <b id="infoMode">Карта</b></span>
+        <span>Инструмент: <b id="infoTool">Кисть</b></span>
+        <span>Страна: <b id="infoCountry">—</b></span>
+        <span>Город: <b id="infoCity">—</b></span>
+        <span>Гекс: <b id="infoHex">—</b></span>
+    </div>
+
+    <div id="zoomControls">
+        <button id="zoomIn">+</button>
+        <button id="zoomOut">−</button>
+        <button id="zoomReset">⌂</button>
+    </div>
+</div>
+
+<div class="modal-overlay" id="cityModal">
+    <div class="modal">
+        <h2 id="cityModalTitle">🏙️ Город</h2>
+
+        <label>Название города</label>
+        <input type="text" id="cityNameInput" placeholder="Берлин" autocomplete="off">
+
+        <label>Уровень</label>
+        <div class="level-picker" id="cityLevelPicker">
+            <button data-level="1">1</button>
+            <button data-level="2">2</button>
+            <button data-level="3">3</button>
+            <button data-level="4">4</button>
+            <button data-level="5">5</button>
+        </div>
+
+        <div class="checkboxes">
+            <label>
+                <input type="checkbox" id="cityCapitalCheck">
+                ★ Столица
+            </label>
+            <label>
+                <input type="checkbox" id="cityPortCheck">
+                ⚓ Порт
+            </label>
+        </div>
+
+        <div class="buttons">
+            <button class="btn-secondary" onclick="closeCityModal()">Отмена</button>
+            <button class="btn-primary" id="citySaveBtn">Сохранить</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="modal">
+    <div class="modal">
+        <h2 id="modalTitle">Готово</h2>
+        <p id="modalText" style="color: #a0aec0; margin-bottom: 20px;">Файл сохранён.</p>
+        <div class="buttons">
+            <button class="btn-primary" onclick="closeModal()">OK</button>
+        </div>
+    </div>
+</div>
+
+<script>
+const COUNTRIES = {
+    france:         { name: "Франция",       flag: "🇫🇷", color: "#3b82f6" },
+    germany:        { name: "Германия",      flag: "🇩🇪", color: "#64748b" },
+    italy:          { name: "Италия",        flag: "🇮🇹", color: "#22c55e" },
+    spain:          { name: "Испания",       flag: "🇪🇸", color: "#eab308" },
+    portugal:       { name: "Португалия",    flag: "🇵🇹", color: "#16a34a" },
+    uk:             { name: "Британия",      flag: "🇬🇧", color: "#dc2626" },
+    ireland:        { name: "Ирландия",      flag: "🇮🇪", color: "#65a30d" },
+    poland:         { name: "Польша",        flag: "🇵🇱", color: "#f472b6" },
+    sweden:         { name: "Швеция",        flag: "🇸🇪", color: "#0ea5e9" },
+    norway:         { name: "Норвегия",      flag: "🇳🇴", color: "#1e40af" },
+    denmark:        { name: "Дания",         flag: "🇩🇰", color: "#b91c1c" },
+    finland:        { name: "Финляндия",     flag: "🇫🇮", color: "#38bdf8" },
+    estonia:        { name: "Эстония",       flag: "🇪🇪", color: "#60a5fa" },
+    latvia:         { name: "Латвия",        flag: "🇱🇻", color: "#9f1239" },
+    lithuania:      { name: "Литва",         flag: "🇱🇹", color: "#f59e0b" },
+    yugoslavia:     { name: "Югославия",     flag: "🇷🇸", color: "#7c3aed" },
+    albania:        { name: "Албания",       flag: "🇦🇱", color: "#991b1b" },
+    greece:         { name: "Греция",        flag: "🇬🇷", color: "#06b6d4" },
+    bulgaria:       { name: "Болгария",      flag: "🇧🇬", color: "#16a34a" },
+    romania:        { name: "Румыния",       flag: "🇷🇴", color: "#ca8a04" },
+    hungary:        { name: "Венгрия",       flag: "🇭🇺", color: "#65a30d" },
+    austria:        { name: "Австрия",       flag: "🇦🇹", color: "#a16207" },
+    czechoslovakia: { name: "Чехословакия",  flag: "🇨🇿", color: "#0891b2" },
+    switzerland:    { name: "Швейцария",     flag: "🇨🇭", color: "#dc2626" },
+    belgium:        { name: "Бельгия",       flag: "🇧🇪", color: "#facc15" },
+    netherlands:    { name: "Нидерланды",    flag: "🇳🇱", color: "#f97316" },
+    luxembourg:     { name: "Люксембург",    flag: "🇱🇺", color: "#3b82f6" },
+    turkey:         { name: "Турция",        flag: "🇹🇷", color: "#b91c1c" },
+    soviet:         { name: "СССР",          flag: "☭",  color: "#dc2626" },
+    saudi:          { name: "Саудовская Аравия", flag: "🇸🇦", color: "#2e6b3e" },
+    iraq:           { name: "Ирак",          flag: "🇮🇶", color: "#7a5c2e" },
+    iran:           { name: "Иран",          flag: "🇮🇷", color: "#8b4a2e" },
+    afghanistan:    { name: "Афганистан",    flag: "🇦🇫", color: "#6b6b4a" },
+    water:          { name: "Море", flag: "🌊", color: "#1e3a5f" },
+};
+
+const WATER_KEY = 'water';
+
+let state = {
+    mode: 'map',
+    hexSize: 10,
+    tool: 'brush',
+    currentCountry: null,
+    currentCityCountry: null,
+    currentCity: null,
+    hexMap: {},
+    cities: {},
+    cityIdCounter: 1,
+    zoom: 1,
+    panX: 0,
+    panY: 0,
+    imageWidth: 939,
+    imageHeight: 765,
+    editingCity: null
+};
+
+let cityHexCache = new Map();
+
+function rebuildCityHexCache() {
+    cityHexCache.clear();
+    for (const [id, city] of Object.entries(state.cities)) {
+        for (const h of city.hexes) {
+            cityHexCache.set(h, id);
+        }
+    }
+}
+
+const bgImage = document.getElementById('bgImage');
+const hexCanvas = document.getElementById('hexCanvas');
+const ctx = hexCanvas.getContext('2d');
+const canvasWrapper = document.getElementById('canvasWrapper');
+const viewport = document.getElementById('viewport');
+const countryList = document.getElementById('countryList');
+const cityList = document.getElementById('cityList');
+
+let drawScheduled = false;
+function scheduleDraw() {
+    if (drawScheduled) return;
+    drawScheduled = true;
+    requestAnimationFrame(() => {
+        draw();
+        drawScheduled = false;
+    });
+}
+
+let cityListScheduled = false;
+function renderCityListThrottled() {
+    if (cityListScheduled) return;
+    cityListScheduled = true;
+    setTimeout(() => {
+        renderCityList();
+        cityListScheduled = false;
+    }, 120);
+}
+
+let countsScheduled = false;
+function updateCountsThrottled() {
+    if (countsScheduled) return;
+    countsScheduled = true;
+    setTimeout(() => {
+        updateCounts();
+        countsScheduled = false;
+    }, 120);
+}
+
+function init() {
+    renderCountryList();
+    renderCityCountrySelect();
+    resizeCanvas();
+    rebuildCityHexCache();
+    draw();
+    bindEvents();
+    updateInfo();
+}
+
+function renderCountryList() {
+    countryList.innerHTML = '';
+
+    const entries = Object.entries(COUNTRIES).sort(([a], [b]) => {
+        if (a === WATER_KEY) return 1;
+        if (b === WATER_KEY) return -1;
+        return 0;
+    });
+
+    entries.forEach(([id, c]) => {
+        const div = document.createElement('div');
+        div.className = 'country-item' + (state.currentCountry === id ? ' active' : '');
+        div.dataset.country = id;
+        div.innerHTML = `
+            <span class="flag">${c.flag}</span>
+            <span class="name">${c.name}</span>
+            <span class="count" id="count-${id}">0</span>
+        `;
+        div.addEventListener('click', () => {
+            state.currentCountry = id;
+            state.currentCity = null;
+            document.querySelectorAll('.country-item').forEach(el => {
+                el.classList.toggle('active', el.dataset.country === id);
+            });
+            updateInfo();
+        });
+        countryList.appendChild(div);
+    });
+}
+
+function renderCityCountrySelect() {
+    const select = document.getElementById('cityCountrySelect');
+    const prevValue = select.value;
+    select.innerHTML = '<option value="">— Выберите страну —</option>';
+
+    const usedCountries = new Set(
+        Object.values(state.hexMap).filter(c => c !== WATER_KEY)
+    );
+
+    Object.entries(COUNTRIES)
+        .filter(([id]) => id !== WATER_KEY)
+        .sort(([a], [b]) => COUNTRIES[a].name.localeCompare(COUNTRIES[b].name))
+        .forEach(([id, c]) => {
+            if (usedCountries.has(id)) {
+                select.innerHTML += `<option value="${id}">${c.flag} ${c.name}</option>`;
+            }
+        });
+
+    if (prevValue && usedCountries.has(prevValue)) {
+        select.value = prevValue;
+        state.currentCityCountry = prevValue;
+    } else {
+        state.currentCityCountry = null;
+        state.currentCity = null;
+    }
+}
+
+function renderCityList() {
+    cityList.innerHTML = '';
+    const country = state.currentCityCountry;
+    if (!country) {
+        cityList.innerHTML = '<div style="padding: 20px; text-align: center; color: #718096; font-size: 12px;">Выберите страну выше</div>';
+        return;
+    }
+
+    const cities = Object.entries(state.cities).filter(([id, c]) => c.country === country);
+    if (cities.length === 0) {
+        cityList.innerHTML = '<div style="padding: 20px; text-align: center; color: #718096; font-size: 12px;">Нет городов. Нажмите "+ Город"</div>';
+        return;
+    }
+
+    cities.forEach(([id, c]) => {
+        const div = document.createElement('div');
+        div.className = 'city-item' + (state.currentCity === id ? ' active' : '');
+        div.dataset.cityId = id;
+        div.innerHTML = `
+            ${c.isCapital ? '<span class="capital">★</span>' : c.isPort ? '<span class="port">⚓</span>' : '<span style="width:14px;"></span>'}
+            <span class="name">${c.name}</span>
+            <span class="level">ур.${c.level}</span>
+            <span class="hexes">${c.hexes.length}</span>
+            <span class="actions">
+                <button data-action="edit" title="Редактировать">✏️</button>
+                <button data-action="delete" title="Удалить">🗑️</button>
+            </span>
+        `;
+        div.addEventListener('click', (e) => {
+            if (e.target.dataset.action === 'edit') {
+                e.stopPropagation();
+                openCityModal(id);
+            } else if (e.target.dataset.action === 'delete') {
+                e.stopPropagation();
+                if (confirm(`Удалить город ${c.name}?`)) {
+                    delete state.cities[id];
+                    if (state.currentCity === id) state.currentCity = null;
+                    rebuildCityHexCache();
+                    renderCityList();
+                    draw();
+                }
+            } else {
+                state.currentCity = id;
+                document.querySelectorAll('.city-item').forEach(el => {
+                    el.classList.toggle('active', el.dataset.cityId === id);
+                });
+                draw();
+                updateInfo();
+            }
+        });
+        cityList.appendChild(div);
+    });
+}
+
+function resizeCanvas() {
+    hexCanvas.width = state.imageWidth;
+    hexCanvas.height = state.imageHeight;
+}
+
+function draw() {
+    rebuildCityHexCache();
+    ctx.clearRect(0, 0, hexCanvas.width, hexCanvas.height);
+
+    const size = state.hexSize;
+    const w = Math.sqrt(3) * size;
+    const h = 2 * size;
+
+    const cols = Math.ceil(state.imageWidth / w) + 1;
+    const rows = Math.ceil(state.imageHeight / (h * 0.75)) + 1;
+
+    for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+            const offsetX = (row % 2) * (w / 2);
+            const cx = col * w + offsetX;
+            const cy = row * h * 0.75;
+
+            if (cx - size > state.imageWidth) continue;
+            if (cy - size > state.imageHeight) continue;
+
+            const key = `${col},${row}`;
+            const countryId = state.hexMap[key];
+
+            if (countryId && COUNTRIES[countryId]) {
+                const alpha = countryId === WATER_KEY ? 0.7 : 0.5;
+                drawHexFill(cx, cy, size, COUNTRIES[countryId].color, alpha);
+            }
+
+            if (state.mode === 'cities') {
+                if (state.currentCityCountry && countryId === state.currentCityCountry) {
+                    drawHexFill(cx, cy, size, COUNTRIES[countryId].color, 0.2);
+                }
+
+                const cityId = cityHexCache.get(key) || null;
+                const isCurrentCity = state.currentCity
+                    && state.cities[state.currentCity]
+                    && state.cities[state.currentCity].hexes.includes(key);
+
+                if (cityId) {
+                    const city = state.cities[cityId];
+                    const cityColor = getCityColor(cityId);
+
+                    drawHexFill(cx, cy, size, cityColor, isCurrentCity ? 0.95 : 0.75);
+
+                    ctx.beginPath();
+                    for (let i = 0; i < 6; i++) {
+                        const angle = Math.PI / 180 * (60 * i - 30);
+                        const x = cx + size * Math.cos(angle);
+                        const y = cy + size * Math.sin(angle);
+                        if (i === 0) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                    }
+                    ctx.closePath();
+                    ctx.globalAlpha = 1;
+                    ctx.strokeStyle = isCurrentCity ? '#ffffff' : cityColor;
+                    ctx.lineWidth = isCurrentCity ? 2.5 : 1.5;
+                    ctx.stroke();
+                    ctx.globalAlpha = 1;
+
+                    if (city.hexes[0] === key) {
+                        ctx.beginPath();
+                        ctx.arc(cx, cy, size * 0.6, 0, Math.PI * 2);
+                        ctx.fillStyle = 'rgba(0,0,0,0.75)';
+                        ctx.fill();
+
+                        ctx.beginPath();
+                        ctx.arc(cx, cy, size * 0.5, 0, Math.PI * 2);
+                        ctx.fillStyle = cityColor;
+                        ctx.fill();
+                        ctx.strokeStyle = '#ffffff';
+                        ctx.lineWidth = 2;
+                        ctx.stroke();
+
+                        ctx.font = `bold ${size * 0.9}px sans-serif`;
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillStyle = '#ffffff';
+                        ctx.strokeStyle = '#000000';
+                        ctx.lineWidth = 2;
+                        const symbol = city.isCapital ? '★' : '●';
+                        ctx.strokeText(symbol, cx, cy + 1);
+                        ctx.fillText(symbol, cx, cy + 1);
+                    }
+
+                } else {
+                    ctx.beginPath();
+                    for (let i = 0; i < 6; i++) {
+                        const angle = Math.PI / 180 * (60 * i - 30);
+                        const x = cx + size * Math.cos(angle);
+                        const y = cy + size * Math.sin(angle);
+                        if (i === 0) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                    }
+                    ctx.closePath();
+                    ctx.globalAlpha = 0.15;
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 0.5;
+                    ctx.stroke();
+                    ctx.globalAlpha = 1;
+                }
+            }
+            else {
+                ctx.beginPath();
+                for (let i = 0; i < 6; i++) {
+                    const angle = Math.PI / 180 * (60 * i - 30);
+                    const x = cx + size * Math.cos(angle);
+                    const y = cy + size * Math.sin(angle);
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.closePath();
+                ctx.globalAlpha = 0.15;
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 0.5;
+                ctx.stroke();
+                ctx.globalAlpha = 1;
+            }
+        }
+    }
+
+    updateCounts();
+    drawRectPreview();
+}
+
+function drawHexFill(cx, cy, size, color, alpha) {
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+        const angle = Math.PI / 180 * (60 * i - 30);
+        const x = cx + size * Math.cos(angle);
+        const y = cy + size * Math.sin(angle);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+}
+
+function findCityByHex(key) {
+    return cityHexCache.get(key) || null;
+}
+
+function areHexesAdjacent(key1, key2) {
+    const [c1, r1] = key1.split(',').map(Number);
+    const [c2, r2] = key2.split(',').map(Number);
+
+    if (Math.abs(r1 - r2) > 1) return false;
+    if (r1 === r2) return Math.abs(c1 - c2) === 1;
+
+    const isEvenRow = r1 % 2 === 0;
+    if (isEvenRow) {
+        return c1 === c2 || c1 === c2 + 1;
+    } else {
+        return c1 === c2 || c1 === c2 - 1;
+    }
+}
+
+function getCityColor(cityId) {
+    let hash = 0;
+    for (let i = 0; i < cityId.length; i++) {
+        hash = cityId.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const hue = Math.abs(hash) % 360;
+    return `hsl(${hue}, 75%, 55%)`;
+}
+
+function updateCounts() {
+    const counts = {};
+    Object.values(state.hexMap).forEach(c => {
+        counts[c] = (counts[c] || 0) + 1;
+    });
+    Object.keys(COUNTRIES).forEach(id => {
+        const el = document.getElementById('count-' + id);
+        if (el) el.textContent = counts[id] || 0;
+    });
+}
+
+let isPainting = false;
+let isPanning = false;
+let panStart = { x: 0, y: 0, px: 0, py: 0 };
+let lastPaintedHex = null;
+
+let isRectDragging = false;
+let rectStart = null;
+let rectEnd = null;
+
+function getHexAtPixel(px, py) {
+    const size = state.hexSize;
+    const w = Math.sqrt(3) * size;
+    const h = 2 * size;
+
+    const row = Math.round(py / (h * 0.75));
+    const offsetX = (row % 2) * (w / 2);
+    const col = Math.round((px - offsetX) / w);
+
+    return { col, row, key: `${col},${row}` };
+}
+
+function bindEvents() {
+    hexCanvas.addEventListener('mousedown', (e) => {
+        const rect = hexCanvas.getBoundingClientRect();
+        const px = (e.clientX - rect.left) / state.zoom;
+        const py = (e.clientY - rect.top) / state.zoom;
+
+        if (state.tool === 'pan') {
+            isPanning = true;
+            panStart = { x: e.clientX, y: e.clientY, px: state.panX, py: state.panY };
+            hexCanvas.style.cursor = 'grabbing';
+            return;
+        }
+
+        if (state.tool === 'rect') {
+            const hex = getHexAtPixel(px, py);
+            isRectDragging = true;
+            rectStart = { col: hex.col, row: hex.row };
+            rectEnd = { col: hex.col, row: hex.row };
+            scheduleDraw();
+            return;
+        }
+
+        isPainting = true;
+        lastPaintedHex = null;
+        paintAt(px, py);
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        if (isPanning) {
+            state.panX = panStart.px + (e.clientX - panStart.x);
+            state.panY = panStart.py + (e.clientY - panStart.y);
+            applyTransform();
+            return;
+        }
+
+        const rect = hexCanvas.getBoundingClientRect();
+        const px = (e.clientX - rect.left) / state.zoom;
+        const py = (e.clientY - rect.top) / state.zoom;
+
+        const hex = getHexAtPixel(px, py);
+        document.getElementById('infoHex').textContent = `${hex.col},${hex.row}`;
+
+        if (isRectDragging) {
+            rectEnd = { col: hex.col, row: hex.row };
+            scheduleDraw();
+            return;
+        }
+
+        if (isPainting) paintAt(px, py);
+    });
+
+    window.addEventListener('mouseup', () => {
+        if (isRectDragging) {
+            applyRectSelection();
+            isRectDragging = false;
+            rectStart = null;
+            rectEnd = null;
+            scheduleDraw();
+            return;
+        }
+
+        isPainting = false;
+        isPanning = false;
+        lastPaintedHex = null;
+        if (state.tool !== 'pan') hexCanvas.style.cursor = 'crosshair';
+    });
+
+    viewport.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? 0.9 : 1.1;
+        state.zoom = Math.max(0.2, Math.min(4, state.zoom * delta));
+        applyTransform();
+    }, { passive: false });
+
+    document.querySelectorAll('.tool-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            state.tool = btn.dataset.tool;
+            document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            hexCanvas.style.cursor = state.tool === 'pan' ? 'grab' : 'crosshair';
+            updateInfo();
+        });
+    });
+
+    document.querySelectorAll('.mode-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            state.mode = tab.dataset.mode;
+            document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+
+            if (state.mode === 'map') {
+                document.getElementById('countryList').classList.remove('hidden');
+                document.getElementById('citiesPanel').classList.add('hidden');
+                document.getElementById('mapPanel').classList.remove('hidden');
+                state.currentCity = null;
+            } else {
+                document.getElementById('countryList').classList.add('hidden');
+                document.getElementById('mapPanel').classList.add('hidden');
+                document.getElementById('citiesPanel').classList.remove('hidden');
+                renderCityCountrySelect();
+                renderCityList();
+            }
+            draw();
+            updateInfo();
+        });
+    });
+
+    document.getElementById('hexSizeSlider').addEventListener('input', (e) => {
+        state.hexSize = parseInt(e.target.value);
+        document.getElementById('hexSizeValue').textContent = state.hexSize;
+        scheduleDraw();
+    });
+
+    document.getElementById('imageInput').addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            bgImage.src = ev.target.result;
+            bgImage.style.display = 'block';
+            bgImage.onload = () => {
+                state.imageWidth = bgImage.naturalWidth;
+                state.imageHeight = bgImage.naturalHeight;
+                resizeCanvas();
+                applyTransform();
+                scheduleDraw();
+            };
+        };
+        reader.readAsDataURL(file);
+    });
+
+    document.getElementById('zoomIn').addEventListener('click', () => {
+        state.zoom = Math.min(4, state.zoom * 1.2);
+        applyTransform();
+    });
+    document.getElementById('zoomOut').addEventListener('click', () => {
+        state.zoom = Math.max(0.2, state.zoom / 1.2);
+        applyTransform();
+    });
+    document.getElementById('zoomReset').addEventListener('click', () => {
+        state.zoom = 1; state.panX = 0; state.panY = 0;
+        applyTransform();
+    });
+
+    document.getElementById('cityCountrySelect').addEventListener('change', (e) => {
+        state.currentCityCountry = e.target.value || null;
+        state.currentCity = null;
+        renderCityList();
+        draw();
+        updateInfo();
+    });
+
+    document.getElementById('addCityBtn').addEventListener('click', () => {
+        if (!state.currentCityCountry) {
+            showModal('Ошибка', 'Сначала выберите страну');
+            return;
+        }
+        openCityModal(null);
+    });
+
+    document.getElementById('assignHexesBtn').addEventListener('click', () => {
+        if (!state.currentCity) {
+            showModal('Ошибка', 'Сначала выберите город в списке');
+            return;
+        }
+        state.tool = 'brush';
+        document.querySelectorAll('.tool-btn').forEach(b => {
+            b.classList.toggle('active', b.dataset.tool === 'brush');
+        });
+        hexCanvas.style.cursor = 'crosshair';
+        updateInfo();
+        showModal('Кисть активна', `Закрашивайте гексы страны "${COUNTRIES[state.currentCityCountry]?.name}" для города "${state.cities[state.currentCity].name}"`);
+    });
+
+    document.getElementById('saveBtn').addEventListener('click', saveGameMap);
+    document.getElementById('loadBtn').addEventListener('click', () => {
+        document.getElementById('loadInput').click();
+    });
+    document.getElementById('loadInput').addEventListener('change', loadGameMap);
+    document.getElementById('resetBtn').addEventListener('click', () => {
+        if (!confirm('Сбросить всю разметку и города?')) return;
+        state.hexMap = {};
+        state.cities = {};
+        state.currentCity = null;
+        state.currentCityCountry = null;
+        rebuildCityHexCache();
+        draw();
+        renderCityList();
+        renderCityCountrySelect();
+        updateCounts();
+        updateInfo();
+    });
+
+    document.querySelectorAll('#cityLevelPicker button').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('#cityLevelPicker button').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        });
+    });
+    document.getElementById('citySaveBtn').addEventListener('click', saveCityFromModal);
+}
+
+function paintAt(px, py) {
+    const hex = getHexAtPixel(px, py);
+    const key = hex.key;
+
+    if (lastPaintedHex === key) return;
+    lastPaintedHex = key;
+
+    let changed = false;
+    let needRefreshCitySelect = false;
+    let cacheDirty = false;
+
+    if (state.mode === 'map') {
+        if (state.tool === 'brush') {
+            if (!state.currentCountry) {
+                showModal('Страна не выбрана', 'Выбери страну (или воду) в палитре слева.');
+                return;
+            }
+
+            const prevCountry = state.hexMap[key];
+
+            if (state.currentCountry === WATER_KEY && prevCountry && prevCountry !== WATER_KEY) {
+                showModal('Нельзя', `Этот гекс принадлежит стране "${COUNTRIES[prevCountry]?.name}". Вода может красить только пустые гексы.`);
+                return;
+            }
+
+            if (prevCountry && prevCountry !== state.currentCountry) {
+                if (prevCountry === WATER_KEY && state.currentCountry !== WATER_KEY) {
+                    // просто перекрашиваем, города не трогаем
+                } else {
+                    for (const city of Object.values(state.cities)) {
+                        const i = city.hexes.indexOf(key);
+                        if (i >= 0) { city.hexes.splice(i, 1); cacheDirty = true; }
+                    }
+                }
+            }
+            if (state.hexMap[key] !== state.currentCountry) {
+                if (state.currentCountry !== WATER_KEY
+                    && !Object.values(state.hexMap).includes(state.currentCountry)) {
+                    needRefreshCitySelect = true;
+                }
+                state.hexMap[key] = state.currentCountry;
+                changed = true;
+            }
+        } else if (state.tool === 'eraser') {
+            if (state.hexMap[key]) {
+                delete state.hexMap[key];
+                for (const city of Object.values(state.cities)) {
+                    const i = city.hexes.indexOf(key);
+                    if (i >= 0) { city.hexes.splice(i, 1); cacheDirty = true; }
+                }
+                changed = true;
+            }
+        } else if (state.tool === 'picker') {
+            if (state.hexMap[key]) {
+                state.currentCountry = state.hexMap[key];
+                document.querySelectorAll('.country-item').forEach(el => {
+                    el.classList.toggle('active', el.dataset.country === state.currentCountry);
+                });
+                updateInfo();
+            }
+            return;
+        }
+
+        if (cacheDirty) rebuildCityHexCache();
+
+        if (changed) {
+            scheduleDraw();
+            updateCountsThrottled();
+            updateInfo();
+            if (needRefreshCitySelect) {
+                renderCityCountrySelect();
+            }
+        }
+
+    } else {
+        if (state.tool === 'brush') {
+            if (!state.currentCity) {
+                showModal('Город не выбран', 'Создай или выбери город в списке.');
+                return;
+            }
+
+            const city = state.cities[state.currentCity];
+
+            if (state.hexMap[key] === WATER_KEY) {
+                return;
+            }
+
+            if (state.hexMap[key] !== city.country) {
+                showModal('Нельзя', `Этот гекс принадлежит другой стране. Город "${city.name}" находится в стране: ${COUNTRIES[city.country]?.name || city.country}`);
+                return;
+            }
+
+            const existingCity = findCityByHex(key);
+            if (existingCity && existingCity !== state.currentCity) {
+                const otherCity = state.cities[existingCity];
+                showModal('Нельзя', `Этот гекс уже занят городом "${otherCity.name}"`);
+                return;
+            }
+
+            if (city.hexes.length > 0 && !city.hexes.includes(key)) {
+                const isAdjacent = city.hexes.some(h => areHexesAdjacent(h, key));
+                if (!isAdjacent) {
+                    showModal('Нельзя', 'Гексы города должны быть смежными (соседними)');
+                    return;
+                }
+            }
+
+            if (!city.hexes.includes(key)) {
+                city.hexes.push(key);
+                cityHexCache.set(key, state.currentCity);
+                changed = true;
+            }
+        } else if (state.tool === 'eraser') {
+            if (state.currentCity) {
+                const city = state.cities[state.currentCity];
+                const i = city.hexes.indexOf(key);
+                if (i >= 0) {
+                    if (city.hexes.length <= 1) {
+                        showModal('Нельзя', 'У города должен остаться хотя бы один гекс');
+                        return;
+                    }
+                    city.hexes.splice(i, 1);
+                    cityHexCache.delete(key);
+                    changed = true;
+                }
+            }
+        }
+
+        if (changed) {
+            scheduleDraw();
+            renderCityListThrottled();
+            updateInfo();
+        }
+    }
+}
+
+function getHexesInRect(start, end) {
+    const minCol = Math.min(start.col, end.col);
+    const maxCol = Math.max(start.col, end.col);
+    const minRow = Math.min(start.row, end.row);
+    const maxRow = Math.max(start.row, end.row);
+
+    const result = [];
+    for (let row = minRow; row <= maxRow; row++) {
+        for (let col = minCol; col <= maxCol; col++) {
+            result.push({ col, row, key: `${col},${row}` });
+        }
+    }
+    return result;
+}
+
+function applyRectSelection() {
+    if (!rectStart || !rectEnd) return;
+
+    const hexes = getHexesInRect(rectStart, rectEnd);
+    if (hexes.length === 0) return;
+
+    if (state.mode === 'map') {
+        if (!state.currentCountry) {
+            showModal('Страна не выбрана', 'Выбери страну (или воду) в палитре слева.');
+            return;
+        }
+
+        const isWater = state.currentCountry === WATER_KEY;
+        let changed = false;
+        let skipped = 0;
+        let cacheDirty = false;
+
+        const countryAlreadyUsed = Object.values(state.hexMap).includes(state.currentCountry);
+
+        hexes.forEach(({ key }) => {
+            const prev = state.hexMap[key];
+
+            if (isWater && prev && prev !== WATER_KEY) {
+                skipped++;
+                return;
+            }
+
+            if (prev === state.currentCountry) return;
+
+            if (prev !== undefined) {
+                if (prev === WATER_KEY && !isWater) {
+                    // просто перекрашиваем
+                } else {
+                    for (const city of Object.values(state.cities)) {
+                        const i = city.hexes.indexOf(key);
+                        if (i >= 0) { city.hexes.splice(i, 1); cacheDirty = true; }
+                    }
+                }
+            }
+
+            state.hexMap[key] = state.currentCountry;
+            changed = true;
+        });
+
+        if (cacheDirty) rebuildCityHexCache();
+
+        if (changed) {
+            scheduleDraw();
+            updateCountsThrottled();
+            updateInfo();
+            if (!isWater && !countryAlreadyUsed) {
+                renderCityCountrySelect();
+            }
+        }
+
+        if (skipped > 0) {
+            showModal('Готово', `Закрашено ${hexes.length - skipped} гексов. Пропущено ${skipped} (вода не трогает страны).`);
+        }
+    }
+    else {
+        if (!state.currentCity) {
+            showModal('Город не выбран', 'Создай или выбери город в списке.');
+            return;
+        }
+
+        const city = state.cities[state.currentCity];
+        let changed = false;
+        let skipped = 0;
+
+        hexes.forEach(({ key }) => {
+            if (state.hexMap[key] === WATER_KEY) { skipped++; return; }
+            if (state.hexMap[key] !== city.country) { skipped++; return; }
+
+            const existingCity = findCityByHex(key);
+            if (existingCity && existingCity !== state.currentCity) { skipped++; return; }
+
+            if (city.hexes.includes(key)) return;
+
+            city.hexes.push(key);
+            cityHexCache.set(key, state.currentCity);
+            changed = true;
+        });
+
+        if (changed) {
+            scheduleDraw();
+            renderCityListThrottled();
+            updateInfo();
+        }
+
+        if (skipped > 0) {
+            showModal('Готово', `Добавлено ${hexes.length - skipped} гексов. Пропущено ${skipped} (чужая страна / море / другой город).`);
+        }
+    }
+}
+
+function drawRectPreview() {
+    if (!isRectDragging || !rectStart || !rectEnd) return;
+
+    const size = state.hexSize;
+    const w = Math.sqrt(3) * size;
+    const h = 2 * size;
+
+    const minCol = Math.min(rectStart.col, rectEnd.col);
+    const maxCol = Math.max(rectStart.col, rectEnd.col);
+    const minRow = Math.min(rectStart.row, rectEnd.row);
+    const maxRow = Math.max(rectStart.row, rectEnd.row);
+
+    ctx.save();
+    ctx.globalAlpha = 0.5;
+    ctx.fillStyle = '#fbbf24';
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1;
+
+    for (let row = minRow; row <= maxRow; row++) {
+        for (let col = minCol; col <= maxCol; col++) {
+            const offsetX = (row % 2) * (w / 2);
+            const cx = col * w + offsetX;
+            const cy = row * h * 0.75;
+
+            ctx.beginPath();
+            for (let i = 0; i < 6; i++) {
+                const angle = Math.PI / 180 * (60 * i - 30);
+                const x = cx + size * Math.cos(angle);
+                const y = cy + size * Math.sin(angle);
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+        }
+    }
+
+    ctx.restore();
+}
+
+function applyTransform() {
+    canvasWrapper.style.transform = `translate(${state.panX}px, ${state.panY}px) scale(${state.zoom})`;
+}
+
+function updateInfo() {
+    document.getElementById('infoMode').textContent = state.mode === 'map' ? 'Карта' : 'Города';
+    document.getElementById('infoTool').textContent =
+        { brush: 'Кисть', rect: 'Прямоугольник', eraser: 'Ластик', picker: 'Пипетка', pan: 'Рука' }[state.tool];
+    document.getElementById('infoCountry').textContent =
+        state.currentCountry ? COUNTRIES[state.currentCountry].name : '—';
+    document.getElementById('infoCity').textContent =
+        state.currentCity && state.cities[state.currentCity]
+            ? state.cities[state.currentCity].name
+            : '—';
+}
+
+function openCityModal(cityId) {
+    const modal = document.getElementById('cityModal');
+    const isEdit = !!cityId;
+
+    document.getElementById('cityModalTitle').textContent = isEdit ? '✏️ Редактировать город' : '🏙️ Новый город';
+    document.getElementById('cityNameInput').value = isEdit ? state.cities[cityId].name : '';
+    document.getElementById('cityCapitalCheck').checked = isEdit ? state.cities[cityId].isCapital : false;
+    document.getElementById('cityPortCheck').checked = isEdit ? state.cities[cityId].isPort : false;
+
+    const level = isEdit ? state.cities[cityId].level : 3;
+    document.querySelectorAll('#cityLevelPicker button').forEach(b => {
+        b.classList.toggle('active', parseInt(b.dataset.level) === level);
+    });
+
+    state.editingCity = cityId;
+    modal.classList.add('show');
+    document.getElementById('cityNameInput').focus();
+}
+
+function closeCityModal() {
+    document.getElementById('cityModal').classList.remove('show');
+    state.editingCity = null;
+}
+
+function saveCityFromModal() {
+    const name = document.getElementById('cityNameInput').value.trim();
+    if (!name) {
+        alert('Введите название города');
+        return;
+    }
+
+    const levelBtn = document.querySelector('#cityLevelPicker button.active');
+    const level = levelBtn ? parseInt(levelBtn.dataset.level) : 3;
+    const isCapital = document.getElementById('cityCapitalCheck').checked;
+    const isPort = document.getElementById('cityPortCheck').checked;
+
+    const existing = Object.entries(state.cities).find(([id, c]) =>
+        c.name.toLowerCase() === name.toLowerCase() &&
+        c.country === state.currentCityCountry &&
+        id !== state.editingCity
+    );
+    if (existing) {
+        alert(`Город с именем "${name}" уже есть в этой стране`);
+        return;
+    }
+
+    if (state.editingCity) {
+        const city = state.cities[state.editingCity];
+        city.name = name;
+        city.level = level;
+        city.isCapital = isCapital;
+        city.isPort = isPort;
+    } else {
+        const id = `city_${state.cityIdCounter++}`;
+        state.cities[id] = {
+            name,
+            level,
+            isCapital,
+            isPort,
+            country: state.currentCityCountry,
+            hexes: []
+        };
+        state.currentCity = id;
+    }
+
+    rebuildCityHexCache();
+    closeCityModal();
+    renderCityList();
+    draw();
+    updateInfo();
+}
+
+function saveGameMap() {
+    const regions = {};
+
+    const countriesWithCities = new Set(
+        Object.values(state.cities).map(c => c.country)
+    );
+
+    const countryHexes = {};
+    Object.entries(state.hexMap).forEach(([key, country]) => {
+        if (!countryHexes[country]) countryHexes[country] = [];
+        countryHexes[country].push(key);
+    });
+
+    Object.entries(countryHexes).forEach(([countryId, hexes]) => {
+        // ✅ ВАЖНО: вода всегда сохраняется, даже если в ней оказались "города"
+        if (countryId !== WATER_KEY && countriesWithCities.has(countryId)) return;
+
+        const isWater = countryId === WATER_KEY;
+        regions[`${countryId}_main`] = {
+            id: `${countryId}_main`,
+            name: COUNTRIES[countryId].name,
+            country: countryId,
+            isCapital: !isWater,
+            isSea: isWater,
+            hexes: hexes.map(k => k.split(',').map(Number)),
+            city: {
+                name: COUNTRIES[countryId].name,
+                level: isWater ? 0 : 3,
+                isCapital: !isWater,
+                isPort: false
+            }
+        };
+    });
+
+    Object.entries(state.cities).forEach(([cityId, city]) => {
+        if (city.hexes.length === 0) return;
+        regions[cityId] = {
+            id: cityId,
+            name: city.name,
+            country: city.country,
+            isCapital: city.isCapital,
+            hexes: city.hexes.map(k => k.split(',').map(Number)),
+            city: {
+                name: city.name,
+                level: city.level,
+                isCapital: city.isCapital,
+                isPort: city.isPort
+            }
+        };
+    });
+
+    let output = `// ============ 🗺️ КАРТА ЕВРОПЫ (сделано вручную) ============\n`;
+    output += `// Размер гекса: ${state.hexSize}px\n`;
+    output += `// Сгенерировано: ${new Date().toLocaleString()}\n`;
+    output += `// Регионов: ${Object.keys(regions).length}\n\n`;
+
+    output += `const EUROPE_MAP = {\n`;
+
+    Object.entries(regions).forEach(([id, r]) => {
+        const avgY = r.hexes.reduce((s, h) => s + h[1], 0) / r.hexes.length;
+        const terrain = r.isSea ? 'sea' : (avgY < 30 ? 'forest' : avgY > 60 ? 'coast' : 'plains');
+
+        output += `    ${id}: {\n`;
+        output += `        name: "${r.name}",\n`;
+        output += `        country: "${r.country}",\n`;
+        output += `        isCapital: ${r.isCapital},\n`;
+        if (r.isSea) output += `        isSea: true,\n`;
+        output += `        hexes: ${JSON.stringify(r.hexes)},\n`;
+        output += `        city: ${JSON.stringify(r.city)},\n`;
+        output += `        neighbors: [],\n`;
+        output += `        terrain: "${terrain}",\n`;
+        output += `        population: ${r.isSea ? 0 : Math.max(1, Math.round(r.hexes.length / 10))},\n`;
+        output += `        industry: ${r.isSea ? 0 : Math.max(1, Math.round(r.hexes.length / 15))},\n`;
+        output += `        resource: "${r.isSea ? 'none' : 'grain'}"\n`;
+        output += `    },\n`;
+    });
+
+    output += `};\n\n`;
+
+    output += `const COUNTRIES = {\n`;
+    const usedCountries = new Set(Object.values(state.hexMap));
+    Object.entries(COUNTRIES).forEach(([id, c]) => {
+        if (usedCountries.has(id)) {
+            output += `    ${id}: { name: "${c.name}", flag: "${c.flag}", color: "${c.color}" },\n`;
+        }
+    });
+    output += `};\n`;
+
+    const blob = new Blob([output], { type: 'text/javascript' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'game-map.js';
+    a.click();
+    URL.revokeObjectURL(url);
+
+    showModal('✅ Сохранено', `Файл game-map.js скачан (${Object.keys(regions).length} регионов).`);
+}
+
+/**
+ * ✅ НАДЁЖНЫЙ ПАРСЕР game-map.js
+ * Вместо хрупкой регулярки использует подсчёт фигурных скобок,
+ * чтобы корректно извлекать тело каждого региона (включая воду).
+ */
+function loadGameMap(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+        try {
+            const text = ev.target.result;
+            const hexMap = {};
+            const cities = {};
+            let cityCounter = 1;
+
+            // Находим начало объекта EUROPE_MAP = {
+            const mapStart = text.indexOf('EUROPE_MAP');
+            if (mapStart < 0) throw new Error('EUROPE_MAP не найден в файле');
+
+            const braceStart = text.indexOf('{', mapStart);
+            if (braceStart < 0) throw new Error('Не найдена открывающая скобка EUROPE_MAP');
+
+            // Извлекаем тело EUROPE_MAP с помощью подсчёта скобок
+            let depth = 0;
+            let braceEnd = -1;
+            for (let i = braceStart; i < text.length; i++) {
+                const ch = text[i];
+                if (ch === '{') depth++;
+                else if (ch === '}') {
+                    depth--;
+                    if (depth === 0) { braceEnd = i; break; }
+                }
+            }
+            if (braceEnd < 0) throw new Error('Не найдена закрывающая скобка EUROPE_MAP');
+
+            const body = text.substring(braceStart + 1, braceEnd);
+
+            // Разбиваем тело на регионы верхнего уровня (по запятым на глубине 0)
+            const regionEntries = [];
+            let current = '';
+            depth = 0;
+            let inString = false;
+            let stringChar = '';
+            let escaped = false;
+
+            for (let i = 0; i < body.length; i++) {
+                const ch = body[i];
+
+                if (escaped) { current += ch; escaped = false; continue; }
+                if (ch === '\\') { current += ch; escaped = true; continue; }
+
+                if (inString) {
+                    current += ch;
+                    if (ch === stringChar) inString = false;
+                    continue;
+                }
+
+                if (ch === '"' || ch === "'") {
+                    inString = true;
+                    stringChar = ch;
+                    current += ch;
+                    continue;
+                }
+
+                if (ch === '{') { depth++; current += ch; continue; }
+                if (ch === '}') { depth--; current += ch; continue; }
+
+                if (ch === ',' && depth === 0) {
+                    if (current.trim()) regionEntries.push(current.trim());
+                    current = '';
+                    continue;
+                }
+
+                current += ch;
+            }
+            if (current.trim()) regionEntries.push(current.trim());
+
+            // Парсим каждый регион
+            for (const entry of regionEntries) {
+                // Формат: key: { ... }
+                const colonIdx = entry.indexOf(':');
+                if (colonIdx < 0) continue;
+                const regionKey = entry.substring(0, colonIdx).trim();
+                const regionBody = entry.substring(colonIdx + 1).trim();
+
+                if (!regionBody.startsWith('{')) continue;
+
+                // Извлекаем внутренности региона
+                const inner = regionBody.substring(1, regionBody.lastIndexOf('}'));
+
+                // Достаём country
+                const countryMatch = inner.match(/country\s*:\s*"([^"]+)"/);
+                if (!countryMatch) continue;
+                const country = countryMatch[1];
+
+                // Достаём hexes (жадно до соответствующей закрывающей скобки)
+                const hexesKeyIdx = inner.indexOf('hexes');
+                if (hexesKeyIdx < 0) continue;
+                const arrStart = inner.indexOf('[', hexesKeyIdx);
+                if (arrStart < 0) continue;
+
+                let arrDepth = 0;
+                let arrEnd = -1;
+                for (let i = arrStart; i < inner.length; i++) {
+                    const ch = inner[i];
+                    if (ch === '[') arrDepth++;
+                    else if (ch === ']') {
+                        arrDepth--;
+                        if (arrDepth === 0) { arrEnd = i; break; }
+                    }
+                }
+                if (arrEnd < 0) continue;
+
+                let hexes;
+                try { hexes = JSON.parse(inner.substring(arrStart, arrEnd + 1)); }
+                catch (err) { continue; }
+
+                hexes.forEach(([x, y]) => {
+                    hexMap[`${x},${y}`] = country;
+                });
+
+                // Достаём city (если есть)
+                const cityKeyIdx = inner.indexOf('city');
+                if (cityKeyIdx >= 0) {
+                    const cityBraceStart = inner.indexOf('{', cityKeyIdx);
+                    if (cityBraceStart >= 0) {
+                        let cityDepth = 0;
+                        let cityBraceEnd = -1;
+                        for (let i = cityBraceStart; i < inner.length; i++) {
+                            const ch = inner[i];
+                            if (ch === '{') cityDepth++;
+                            else if (ch === '}') {
+                                cityDepth--;
+                                if (cityDepth === 0) { cityBraceEnd = i; break; }
+                            }
+                        }
+                        if (cityBraceEnd >= 0) {
+                            try {
+                                const city = JSON.parse(inner.substring(cityBraceStart, cityBraceEnd + 1));
+                                const id = `city_${cityCounter++}`;
+                                cities[id] = {
+                                    ...city,
+                                    country,
+                                    hexes: hexes.map(([x, y]) => `${x},${y}`)
+                                };
+                            } catch (err) { /* пропускаем битый city */ }
+                        }
+                    }
+                }
+            }
+
+            state.hexMap = hexMap;
+            state.cities = cities;
+            state.cityIdCounter = cityCounter;
+            state.currentCity = null;
+            state.currentCityCountry = null;
+
+            rebuildCityHexCache();
+            draw();
+            renderCityList();
+            renderCityCountrySelect();
+            updateCounts();
+            updateInfo();
+            showModal('✅ Загружено', `${Object.keys(hexMap).length} гексов, ${Object.keys(cities).length} городов.`);
+        } catch (err) {
+            showModal('Ошибка', err.message);
+        }
+    };
+    reader.readAsText(file);
+}
+
+function showModal(title, text) {
+    document.getElementById('modalTitle').textContent = title;
+    document.getElementById('modalText').textContent = text;
+    document.getElementById('modal').classList.add('show');
+}
+
+function closeModal() {
+    document.getElementById('modal').classList.remove('show');
+}
+
+init();
+</script>
+
+</body>
+</html>
