@@ -21,8 +21,7 @@ const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'physics_platform_secret_2026';
 
 // 🎮 URL стратегии на Render
-const STRATEGY_URL = process.env.STRATEGY_URL || 'https://your-strategy.onrender.com';
-
+const STRATEGY_URL = process.env.STRATEGY_URL || 'https://mrnerds-stratege.onrender.com';
 // ============ 🧹 АВТООЧИСТКА ============
 const CLEANUP_HOUR_MSK = 12;
 const MSK_OFFSET_HOURS = 3;
