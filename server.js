@@ -1423,7 +1423,7 @@ app.delete('/api/notifications/:id', async (req, res) => {
 // ============================================================
 
 // 1. Возвращаем конфиг клиенту
-app.get('/api/https://mrnerds-stratege.onrender.com/config', (req, res) => {
+app.get('/api/strategy/config', (req, res) => {
     const token = req.cookies.token;
     if (!token) return res.status(401).json({ error: 'Не авторизован' });
 
@@ -1439,7 +1439,7 @@ app.get('/api/https://mrnerds-stratege.onrender.com/config', (req, res) => {
 });
 
 // 2. Прокси-пинг Render (чтобы не было CORS)
-app.get('/api/https://mrnerds-stratege.onrender.com/ping', async (req, res) => {
+app.get('/api/strategy/ping', async (req, res) => {
     try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 5000);

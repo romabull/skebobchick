@@ -1,13 +1,24 @@
 {
   "version": 2,
-  "buildCommand": "echo 'No build step needed'",
   "builds": [
     {
       "src": "server.js",
       "use": "@vercel/node"
+    },
+    {
+      "src": "public/**",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "server.js"
+    },
+    {
+      "src": "/admin",
+      "dest": "server.js"
+    },
     {
       "src": "/(.*)",
       "dest": "server.js"

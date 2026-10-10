@@ -2850,7 +2850,7 @@ async function openStrategy() {
 
     // 1. Получаем конфиг с URL стратегии
     try {
-        const response = await fetch('/api/https://mrnerds-stratege.onrender.com/config');
+        const response = await fetch('/api/strategy/config');
         if (!response.ok) {
             alert('Не удалось получить конфиг стратегии');
             return;
@@ -2874,7 +2874,7 @@ async function openStrategy() {
         updateStrategyStatus(`Пингуем сервер... (${attempts}/${MAX_ATTEMPTS})`);
 
         try {
-            const response = await fetch('/api/https://mrnerds-stratege.onrender.com/ping');
+            const response = await fetch('/api/strategy/ping');
             const data = await response.json();
 
             if (data.awake) {
