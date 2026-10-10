@@ -1362,3 +1362,83 @@ body.in-call #background-squares {
         min-height: 32px;
     }
 }
+/* ============ 🎮 ЗАГРУЗКА СТРАТЕГИИ ============ */
+.strategy-loader {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 10, 42, 0.95);
+    backdrop-filter: blur(12px);
+    z-index: 99999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.strategy-loader-content {
+    background: rgba(30, 30, 60, 0.95);
+    border-radius: 24px;
+    padding: 50px 40px;
+    max-width: 480px;
+    width: 100%;
+    text-align: center;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+    border: 2px solid rgba(102, 126, 234, 0.3);
+    animation: strategySlideIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes strategySlideIn {
+    from { opacity: 0; transform: translateY(30px) scale(0.95); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.strategy-loader-content h2 {
+    color: #e2e8f0;
+    font-size: 1.6em;
+    margin: 25px 0 12px;
+}
+
+.strategy-loader-content p {
+    color: #a0aec0;
+    font-size: 15px;
+    margin-bottom: 30px;
+    min-height: 22px;
+}
+
+.strategy-spinner {
+    width: 80px;
+    height: 80px;
+    margin: 0 auto;
+    border: 6px solid rgba(102, 126, 234, 0.2);
+    border-top-color: #667eea;
+    border-radius: 50%;
+    animation: strategySpin 1s linear infinite;
+}
+
+@keyframes strategySpin {
+    to { transform: rotate(360deg); }
+}
+
+.strategy-timer { margin-bottom: 25px; }
+
+.strategy-progress {
+    height: 8px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 10px;
+}
+
+.strategy-progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+    border-radius: 4px;
+    transition: width 1s linear;
+    box-shadow: 0 0 15px rgba(102, 126, 234, 0.6);
+}
+
+#strategyTimerText {
+    color: #a5b4fc;
+    font-size: 14px;
+    font-weight: 600;
+}

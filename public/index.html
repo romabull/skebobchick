@@ -28,7 +28,6 @@
                     <button id="loginBtn" class="btn-primary">Войти</button>
                     <button id="registerBtn" class="btn-secondary">Зарегистрироваться</button>
                 </div>
-                
             </div>
         </div>
 
@@ -38,7 +37,6 @@
                 <div class="header-content">
                     <h1>🔬 Платформа тестирования</h1>
                     <div class="user-info">
-                        <!-- 🔔 Кнопка уведомлений -->
                         <button id="notificationsBtn" class="notif-btn">
                             🔔
                             <span id="notifBadge" class="notif-badge"></span>
@@ -54,12 +52,14 @@
                     <button class="tab-btn" data-tab="leaderboard">🏆 Лидеры</button>
                     <button class="tab-btn active" data-tab="lessons">📚 Обучение</button>
                     <button class="tab-btn" data-tab="calls">📞 Звонки</button>
+                    <button class="tab-btn" data-tab="strategy">🎮 Стратегия</button>
                 </div>
                 <div id="userNav" style="display: none;" class="admin-tabs">
                     <button class="tab-btn" data-tab="myresults">📈 Мои результаты</button>
                     <button class="tab-btn" data-tab="leaderboard">🏆 Лидеры</button>
                     <button class="tab-btn active" data-tab="lessons">📚 Обучение</button>
                     <button class="tab-btn" data-tab="calls">📞 Звонки</button>
+                    <button class="tab-btn" data-tab="strategy">🎮 Стратегия</button>
                 </div>
             </header>
 
@@ -81,7 +81,7 @@
                 <div id="leaderboardContent"></div>
             </div>
 
-            <!-- ============ 📚 ОБУЧЕНИЕ ============ -->
+            <!-- Вкладка: Обучение -->
             <div id="tab-lessons" class="tab-content active">
                 
                 <!-- ЭКРАН 1: Выбор -->
@@ -175,17 +175,17 @@
                                 <small style="color: #718096; font-size: 13px;">**жирный** → жирный, ### Заголовок → большой заголовок</small>
                             </div>
                             
-<div class="form-group">
-    <label>🧮 Формулы</label>
-    <div id="formulasList" style="margin-bottom: 10px;"></div>
-    <button type="button" id="addFormulaBtn" class="btn-secondary" style="padding: 8px 18px;">+ Добавить формулу</button>
-</div>
+                            <div class="form-group">
+                                <label>🧮 Формулы</label>
+                                <div id="formulasList" style="margin-bottom: 10px;"></div>
+                                <button type="button" id="addFormulaBtn" class="btn-secondary" style="padding: 8px 18px;">+ Добавить формулу</button>
+                            </div>
 
-<div class="form-group">
-    <label>💡 Примеры решения задач</label>
-    <div id="examplesList" style="margin-bottom: 10px;"></div>
-    <button type="button" id="addExampleBtn" class="btn-secondary" style="padding: 8px 18px;">+ Добавить пример</button>
-</div>
+                            <div class="form-group">
+                                <label>💡 Примеры решения задач</label>
+                                <div id="examplesList" style="margin-bottom: 10px;"></div>
+                                <button type="button" id="addExampleBtn" class="btn-secondary" style="padding: 8px 18px;">+ Добавить пример</button>
+                            </div>
                             
                             <div class="form-group">
                                 <label>📝 Привязать тесты (можно несколько)</label>
@@ -371,13 +371,29 @@
         <div id="remoteAudios"></div>
     </div>
 
-    <!-- 🔔 Панель уведомлений (вне header, чтобы fixed работал корректно) -->
+    <!-- 🔔 Панель уведомлений -->
     <div id="notifPanel" class="notif-panel">
         <div class="notif-header">
             <strong>🔔 Уведомления</strong>
             <button id="markAllReadBtn">Прочитать все</button>
         </div>
         <div id="notifList" class="notif-list"></div>
+    </div>
+
+    <!-- 🎮 ЛОАДЕР ЗАГРУЗКИ СТРАТЕГИИ -->
+    <div id="strategyLoader" class="strategy-loader" style="display: none;">
+        <div class="strategy-loader-content">
+            <div class="strategy-spinner"></div>
+            <h2>🎮 Загрузка стратегии...</h2>
+            <p id="strategyStatus">Пингуем сервер...</p>
+            <div class="strategy-timer">
+                <div class="strategy-progress">
+                    <div id="strategyProgressBar" class="strategy-progress-bar"></div>
+                </div>
+                <div id="strategyTimerText">60 сек</div>
+            </div>
+            <button id="cancelStrategyBtn" class="btn-secondary">❌ Отмена</button>
+        </div>
     </div>
 
     <script src="script.js"></script>

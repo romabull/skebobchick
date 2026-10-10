@@ -1,3 +1,9 @@
+// ============================================================
+// 📚 ПЛАТФОРМА (Vercel) — mrnerd.vercel.app
+// Игровая логика удалена, остались: тесты, уроки, звонки, 
+// уведомления, авторизация + интеграция со стратегией
+// ============================================================
+
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -14,15 +20,17 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'physics_platform_secret_2026';
 
+// 🎮 URL стратегии на Render
+const STRATEGY_URL = process.env.STRATEGY_URL || 'https://your-strategy.onrender.com';
+
 // ============ 🧹 АВТООЧИСТКА ============
 const CLEANUP_HOUR_MSK = 12;
 const MSK_OFFSET_HOURS = 3;
 let cleanupInterval = null;
 
-// 🔥 Определяем, работаем ли на Vercel
-const IS_VERCEL = !!process.env.VERCEL || process.env.NODE_ENV === 'production';
+const IS_VERCEL = !!process.env.VERCEL;
 
-// Middleware
+// ============ MIDDLEWARE ============
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
@@ -31,10 +39,9 @@ app.use(cors({
     credentials: true
 }));
 
-// ============ 📁 СТАТИЧЕСКИЕ ФАЙЛЫ ============
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(process.cwd(), 'public')));
 
-// ============ 🔥 ПОДКЛЮЧЕНИЕ К FIREBASE ============
+// ============ 🔥 FIREBASE ============
 
 let db = null;
 let messaging = null;
@@ -45,25 +52,21 @@ function initFirebase() {
         const fs = require('fs');
         if (fs.existsSync(path.join(__dirname, 'serviceAccountKey.json'))) {
             const serviceAccount = require('./serviceAccountKey.json');
-            initializeApp({
-                credential: cert(serviceAccount)
-            });
+            initializeApp({ credential: cert(serviceAccount) });
             db = getFirestore();
             messaging = getMessaging();
-            console.log('✅ Firebase подключен через serviceAccountKey.json');
+            console.log('✅ Firebase через serviceAccountKey.json');
             return true;
         }
     } catch (error) {
-        console.log('⚠️ Не удалось подключиться через serviceAccountKey.json:', error.message);
+        console.log('⚠️ serviceAccountKey.json не работает:', error.message);
     }
 
     try {
-        if (process.env.FIREBASE_PROJECT_ID && 
-            process.env.FIREBASE_CLIENT_EMAIL && 
+        if (process.env.FIREBASE_PROJECT_ID &&
+            process.env.FIREBASE_CLIENT_EMAIL &&
             process.env.FIREBASE_PRIVATE_KEY) {
-            
             const privateKey = process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n');
-            
             initializeApp({
                 credential: cert({
                     projectId: process.env.FIREBASE_PROJECT_ID,
@@ -73,20 +76,32 @@ function initFirebase() {
             });
             db = getFirestore();
             messaging = getMessaging();
-            console.log('✅ Firebase подключен через переменные окружения');
+            console.log('✅ Firebase через env');
             return true;
         }
     } catch (error) {
-        console.error('❌ Ошибка подключения к Firebase:', error.message);
+        console.error('❌ Firebase:', error.message);
     }
 
-    console.log('⚠️ Firebase не подключен. Используем память.');
+    console.log('⚠️ Firebase не подключён. Память.');
     return false;
 }
 
 firebaseInitialized = initFirebase();
 
-// ============ 📦 FALLBACK: ХРАНИЛИЩЕ В ПАМЯТИ ============
+// ============ 🕐 ХЕЛПЕР ДАТ ============
+
+function toISOString(value) {
+    if (!value) return null;
+    if (typeof value === 'string') return value;
+    if (typeof value.toDate === 'function') return value.toDate().toISOString();
+    if (value._seconds !== undefined) return new Date(value._seconds * 1000).toISOString();
+    if (value instanceof Date) return value.toISOString();
+    if (typeof value === 'number') return new Date(value).toISOString();
+    return null;
+}
+
+// ============ 📦 FALLBACK ПАМЯТЬ ============
 const memoryDB = {
     users: {},
     tests: {},
@@ -100,15 +115,18 @@ const memoryDB = {
     testIdCounter: 1
 };
 
-// ============ 🔥 ФУНКЦИИ РАБОТЫ С БД ============
+// ============ 🔥 БД ФУНКЦИИ ============
 
 async function getUser(username) {
     if (firebaseInitialized) {
         try {
             const doc = await db.collection('users').doc(username).get();
-            if (doc.exists) return doc.data();
+            if (doc.exists) {
+                const data = doc.data();
+                return { ...data, created: toISOString(data.created) };
+            }
         } catch (error) {
-            console.error('❌ Ошибка получения пользователя:', error.message);
+            console.error('❌ getUser:', error.message);
         }
     }
     return memoryDB.users[username] || null;
@@ -122,7 +140,7 @@ async function createUser(username, password, role = 'user') {
             });
             return true;
         } catch (error) {
-            console.error('❌ Ошибка создания пользователя:', error.message);
+            console.error('❌ createUser:', error.message);
         }
     }
     memoryDB.users[username] = { username, password, role, created: new Date() };
@@ -134,10 +152,17 @@ async function getTests() {
         try {
             const snapshot = await db.collection('tests').get();
             const tests = [];
-            snapshot.forEach(doc => tests.push({ id: doc.id, ...doc.data() }));
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                tests.push({
+                    id: doc.id, ...data,
+                    createdAt: toISOString(data.createdAt),
+                    updatedAt: toISOString(data.updatedAt)
+                });
+            });
             return tests;
         } catch (error) {
-            console.error('❌ Ошибка получения тестов:', error.message);
+            console.error('❌ getTests:', error.message);
         }
     }
     return Object.values(memoryDB.tests);
@@ -147,9 +172,16 @@ async function getTest(testId) {
     if (firebaseInitialized) {
         try {
             const doc = await db.collection('tests').doc(String(testId)).get();
-            if (doc.exists) return { id: doc.id, ...doc.data() };
+            if (doc.exists) {
+                const data = doc.data();
+                return {
+                    id: doc.id, ...data,
+                    createdAt: toISOString(data.createdAt),
+                    updatedAt: toISOString(data.updatedAt)
+                };
+            }
         } catch (error) {
-            console.error('❌ Ошибка получения теста:', error.message);
+            console.error('❌ getTest:', error.message);
         }
     }
     return memoryDB.tests[testId] || null;
@@ -163,7 +195,7 @@ async function createTest(testData) {
             });
             return { id: docRef.id, ...testData };
         } catch (error) {
-            console.error('❌ Ошибка создания теста:', error.message);
+            console.error('❌ createTest:', error.message);
         }
     }
     const testId = memoryDB.testIdCounter++;
@@ -178,7 +210,7 @@ async function updateTest(testId, testData) {
             await db.collection('tests').doc(String(testId)).update(testData);
             return true;
         } catch (error) {
-            console.error('❌ Ошибка обновления теста:', error.message);
+            console.error('❌ updateTest:', error.message);
             return false;
         }
     }
@@ -195,7 +227,7 @@ async function deleteTest(testId) {
             await db.collection('tests').doc(String(testId)).delete();
             return true;
         } catch (error) {
-            console.error('❌ Ошибка удаления теста:', error.message);
+            console.error('❌ deleteTest:', error.message);
         }
     }
     delete memoryDB.tests[testId];
@@ -210,7 +242,7 @@ async function saveResult(username, resultData) {
             });
             return true;
         } catch (error) {
-            console.error('❌ Ошибка сохранения результата:', error.message);
+            console.error('❌ saveResult:', error.message);
         }
     }
     if (!memoryDB.results[username]) memoryDB.results[username] = [];
@@ -224,10 +256,16 @@ async function getUserResults(username) {
             const snapshot = await db.collection('results')
                 .where('username', '==', username).get();
             const results = [];
-            snapshot.forEach(doc => results.push({ id: doc.id, ...doc.data() }));
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                results.push({
+                    id: doc.id, ...data,
+                    completedAt: toISOString(data.completedAt)
+                });
+            });
             return results;
         } catch (error) {
-            console.error('❌ Ошибка получения результатов:', error.message);
+            console.error('❌ getUserResults:', error.message);
         }
     }
     return memoryDB.results[username] || [];
@@ -238,10 +276,17 @@ async function getAllUsers() {
         try {
             const snapshot = await db.collection('users').get();
             const users = [];
-            snapshot.forEach(doc => users.push(doc.data()));
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                users.push({
+                    ...data,
+                    created: toISOString(data.created),
+                    fcmUpdatedAt: toISOString(data.fcmUpdatedAt)
+                });
+            });
             return users;
         } catch (error) {
-            console.error('❌ Ошибка получения пользователей:', error.message);
+            console.error('❌ getAllUsers:', error.message);
         }
     }
     return Object.values(memoryDB.users);
@@ -252,10 +297,16 @@ async function getAllResults() {
         try {
             const snapshot = await db.collection('results').get();
             const results = [];
-            snapshot.forEach(doc => results.push({ id: doc.id, ...doc.data() }));
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                results.push({
+                    id: doc.id, ...data,
+                    completedAt: toISOString(data.completedAt)
+                });
+            });
             return results;
         } catch (error) {
-            console.error('❌ Ошибка получения результатов:', error.message);
+            console.error('❌ getAllResults:', error.message);
         }
     }
     const allResults = [];
@@ -269,20 +320,22 @@ app.use((req, res, next) => {
     next();
 });
 
+// ============================================================
 // ============ АВТОРИЗАЦИЯ ============
+// ============================================================
 
 app.post('/api/register', async (req, res) => {
     try {
         const { username, password, role = 'user' } = req.body;
         if (!username || !password) return res.status(400).json({ error: 'Заполните все поля' });
-        
+
         const existingUser = await getUser(username);
         if (existingUser) return res.status(400).json({ error: 'Пользователь уже существует' });
-        
+
         if (username.length < 3 || password.length < 4) {
             return res.status(400).json({ error: 'Имя минимум 3 символа, пароль - 4' });
         }
-        
+
         const hashedPassword = await bcrypt.hash(password, 10);
         await createUser(username, hashedPassword, role);
         res.json({ success: true, message: 'Регистрация успешна!', role });
@@ -297,15 +350,14 @@ app.post('/api/login', async (req, res) => {
         const { username, password } = req.body;
         const user = await getUser(username);
         if (!user) return res.status(400).json({ error: 'Пользователь не найден' });
-        
+
         const validPassword = await bcrypt.compare(password, user.password);
         if (!validPassword) return res.status(400).json({ error: 'Неверный пароль' });
-        
+
         const token = jwt.sign({ username, role: user.role }, JWT_SECRET, { expiresIn: '24h' });
-        
-        // 🔥 Cookie: на Vercel — sameSite:none + secure, локально — lax
-        res.cookie('token', token, { 
-            httpOnly: true, 
+
+        res.cookie('token', token, {
+            httpOnly: true,
             maxAge: 86400000,
             sameSite: IS_VERCEL ? 'none' : 'lax',
             secure: IS_VERCEL
@@ -338,13 +390,13 @@ app.get('/api/me', (req, res) => {
 app.post('/api/push-token', async (req, res) => {
     const token = req.cookies.token;
     if (!token) return res.status(401).json({ error: 'Не авторизован' });
-    
+
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
         const { token: fcmToken } = req.body;
-        
+
         if (!fcmToken) return res.status(400).json({ error: 'Нет токена' });
-        
+
         if (firebaseInitialized) {
             await db.collection('users').doc(decoded.username).update({
                 fcmToken: fcmToken,
@@ -356,8 +408,8 @@ app.post('/api/push-token', async (req, res) => {
                 memoryDB.users[decoded.username].fcmUpdatedAt = new Date();
             }
         }
-        
-        console.log(`📱 Сохранён FCM-токен для ${decoded.username}`);
+
+        console.log(`📱 FCM-токен для ${decoded.username}`);
         res.json({ success: true });
     } catch (error) {
         console.error('Ошибка сохранения токена:', error);
@@ -365,7 +417,9 @@ app.post('/api/push-token', async (req, res) => {
     }
 });
 
+// ============================================================
 // ============ ТЕСТЫ ============
+// ============================================================
 
 app.get('/api/tests', async (req, res) => {
     const token = req.cookies.token;
@@ -398,12 +452,12 @@ app.post('/api/tests', async (req, res) => {
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
         if (decoded.role !== 'admin') return res.status(403).json({ error: 'Доступ только для администратора' });
-        
+
         const { title, description, class: classNum, category, timeLimit, questions, linkedLessonIds } = req.body;
         if (!title || !questions || !Array.isArray(questions) || questions.length === 0) {
             return res.status(400).json({ error: 'Некорректные данные' });
         }
-        
+
         const newTest = {
             title,
             description: description || '',
@@ -423,7 +477,7 @@ app.post('/api/tests', async (req, res) => {
             linkedLessonIds: Array.isArray(linkedLessonIds) ? linkedLessonIds : [],
             createdBy: decoded.username
         };
-        
+
         const created = await createTest(newTest);
         if (!created) return res.status(500).json({ error: 'Ошибка создания теста' });
 
@@ -438,39 +492,30 @@ app.post('/api/tests', async (req, res) => {
                 testId: created.id,
                 testTitle: title,
                 category: newTest.category,
-                createdAt: new Date()
+                createdAt: new Date().toISOString()
             };
-            
+
             if (firebaseInitialized) {
                 const feedRef = db.collection('notification_feed').doc('current');
                 const feedDoc = await feedRef.get();
-                
                 let feed = [];
-                if (feedDoc.exists) {
-                    feed = feedDoc.data().items || [];
-                }
-                
+                if (feedDoc.exists) feed = feedDoc.data().items || [];
                 feed.unshift(notification);
                 feed = feed.slice(0, 20);
-                
-                await feedRef.set({
-                    items: feed,
-                    updatedAt: new Date()
-                });
+                await feedRef.set({ items: feed, updatedAt: new Date() });
             } else {
                 if (!memoryDB.notificationFeed) memoryDB.notificationFeed = [];
                 memoryDB.notificationFeed.unshift(notification);
                 memoryDB.notificationFeed = memoryDB.notificationFeed.slice(0, 20);
             }
-            
-            console.log(`📢 Уведомление создано: ${title}`);
-            
+
+            console.log(`📢 Уведомление: ${title}`);
+
             if (messaging) {
                 const users = await getAllUsers();
                 for (const user of users) {
                     if (user.username === decoded.username) continue;
                     if (!user.fcmToken) continue;
-                    
                     try {
                         await messaging.send({
                             token: user.fcmToken,
@@ -480,20 +525,16 @@ app.post('/api/tests', async (req, res) => {
                             },
                             android: {
                                 priority: 'high',
-                                notification: {
-                                    channelId: 'default',
-                                    sound: 'default'
-                                }
+                                notification: { channelId: 'default', sound: 'default' }
                             }
                         });
-                        console.log(`📤 Push отправлен ${user.username}`);
                     } catch (e) {
                         console.error(`Ошибка push для ${user.username}:`, e.message);
                     }
                 }
             }
         } catch (err) {
-            console.error('Ошибка создания уведомления:', err);
+            console.error('Ошибка уведомления:', err);
         }
 
         console.log(`✅ Создан тест: ${title}`);
@@ -510,17 +551,17 @@ app.put('/api/tests/:id', async (req, res) => {
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
         if (decoded.role !== 'admin') return res.status(403).json({ error: 'Доступ только для администратора' });
-        
+
         const testId = req.params.id;
         const { title, description, class: classNum, category, timeLimit, questions, linkedLessonIds } = req.body;
-        
+
         const existingTest = await getTest(testId);
         if (!existingTest) return res.status(404).json({ error: 'Тест не найден' });
-        
+
         if (!title || !questions || !Array.isArray(questions) || questions.length === 0) {
             return res.status(400).json({ error: 'Некорректные данные' });
         }
-        
+
         const updatedTest = {
             title,
             description: description || '',
@@ -541,11 +582,11 @@ app.put('/api/tests/:id', async (req, res) => {
             createdBy: existingTest.createdBy || decoded.username,
             updatedAt: new Date()
         };
-        
+
         const success = await updateTest(testId, updatedTest);
         if (success) {
-            console.log(`✅ Обновлен тест: ${title}`);
-            res.json({ success: true, message: 'Тест обновлен', test: { id: testId, ...updatedTest } });
+            console.log(`✅ Обновлён тест: ${title}`);
+            res.json({ success: true, message: 'Тест обновлён', test: { id: testId, ...updatedTest } });
         } else {
             res.status(500).json({ error: 'Ошибка обновления теста' });
         }
@@ -561,13 +602,12 @@ app.delete('/api/tests/:id', async (req, res) => {
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
         if (decoded.role !== 'admin') return res.status(403).json({ error: 'Доступ только для администратора' });
-        
-        const testId = req.params.id;
-        const test = await getTest(testId);
+
+        const test = await getTest(req.params.id);
         if (!test) return res.status(404).json({ error: 'Тест не найден' });
-        
-        await deleteTest(testId);
-        res.json({ success: true, message: 'Тест удален' });
+
+        await deleteTest(req.params.id);
+        res.json({ success: true, message: 'Тест удалён' });
     } catch (error) {
         console.error('Ошибка удаления теста:', error);
         res.status(401).json({ error: 'Не авторизован' });
@@ -583,17 +623,17 @@ app.post('/api/tests/:id/check', async (req, res) => {
         const decoded = jwt.verify(token, JWT_SECRET);
         const testId = req.params.id;
         const { answers, timeSpent } = req.body;
-        
+
         const test = await getTest(testId);
         if (!test) return res.status(404).json({ error: 'Тест не найден' });
-        
+
         let correct = 0;
         const results = test.questions.map((q, index) => {
             const userAnswer = answers[index];
             let isCorrect = false;
             let displayAnswer = '';
             let correctAnswer = '';
-            
+
             if (q.type === 'input') {
                 const userText = (userAnswer || '').toString().trim().toLowerCase();
                 const correctText = (q.correctText || '').toString().trim().toLowerCase();
@@ -605,9 +645,9 @@ app.post('/api/tests/:id/check', async (req, res) => {
                 displayAnswer = userAnswer !== undefined ? q.options[userAnswer] : 'Не отвечено';
                 correctAnswer = q.options[q.correct];
             }
-            
+
             if (isCorrect) correct++;
-            
+
             return {
                 questionId: q.id,
                 type: q.type || 'choice',
@@ -619,7 +659,7 @@ app.post('/api/tests/:id/check', async (req, res) => {
                 hint: q.hint || ''
             };
         });
-        
+
         const resultData = {
             testId: testId,
             testTitle: test.title,
@@ -631,7 +671,7 @@ app.post('/api/tests/:id/check', async (req, res) => {
             timeSpent: timeSpent || 0,
             results
         };
-        
+
         await saveResult(decoded.username, resultData);
         res.json(resultData);
     } catch (error) {
@@ -660,23 +700,23 @@ app.get('/api/admin/stats', async (req, res) => {
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
         if (decoded.role !== 'admin') return res.status(403).json({ error: 'Доступ только для администратора' });
-        
+
         const users = await getAllUsers();
         const tests = await getTests();
         const results = await getAllResults();
-        
+
         const categoryStats = {};
         tests.forEach(t => {
             const cat = t.category || 'Другое';
             if (!categoryStats[cat]) categoryStats[cat] = { tests: 0, completions: 0 };
             categoryStats[cat].tests++;
         });
-        
+
         results.forEach(r => {
             const cat = r.category || 'Другое';
             if (categoryStats[cat]) categoryStats[cat].completions++;
         });
-        
+
         res.json({
             totalUsers: users.length,
             totalTests: tests.length,
@@ -693,24 +733,24 @@ app.get('/api/admin/stats', async (req, res) => {
             }))
         });
     } catch (error) {
-        console.error('Ошибка получения статистики:', error);
+        console.error('Ошибка статистики:', error);
         res.status(401).json({ error: 'Не авторизован' });
     }
 });
 
-// ============ 🏆 ТАБЛИЦА ЛИДЕРОВ ============
+// ============ 🏆 ЛИДЕРБОРД ============
 
 app.get('/api/leaderboard', async (req, res) => {
     try {
         const results = await getAllResults();
         const leaderboard = [];
         const userResults = {};
-        
+
         results.forEach(r => {
             if (!userResults[r.username]) userResults[r.username] = [];
             userResults[r.username].push(r);
         });
-        
+
         Object.keys(userResults).forEach(username => {
             const list = userResults[username];
             if (list && list.length > 0) {
@@ -724,16 +764,18 @@ app.get('/api/leaderboard', async (req, res) => {
                 });
             }
         });
-        
+
         leaderboard.sort((a, b) => b.bestScore - a.bestScore);
         res.json(leaderboard);
     } catch (error) {
-        console.error('Ошибка получения лидеров:', error);
+        console.error('Ошибка лидерборда:', error);
         res.status(500).json({ error: 'Ошибка сервера' });
     }
 });
 
-// ============ 📞 АУДИОЗВОНКИ ============
+// ============================================================
+// ============ 📞 АУДИОЗВОНКИ (WebRTC) ============
+// ============================================================
 
 app.post('/api/calls/rooms', async (req, res) => {
     const token = req.cookies.token;
@@ -741,7 +783,7 @@ app.post('/api/calls/rooms', async (req, res) => {
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
         const { name } = req.body;
-        
+
         const roomId = 'room_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
         const room = {
             id: roomId,
@@ -750,13 +792,13 @@ app.post('/api/calls/rooms', async (req, res) => {
             createdAt: new Date(),
             active: true
         };
-        
+
         if (firebaseInitialized) {
             await db.collection('callRooms').doc(roomId).set(room);
         } else {
             memoryDB.callRooms[roomId] = room;
         }
-        
+
         console.log(`📞 Создана комната: ${room.name}`);
         res.json({ success: true, room });
     } catch (error) {
@@ -771,31 +813,26 @@ app.get('/api/calls/rooms', async (req, res) => {
     try {
         jwt.verify(token, JWT_SECRET);
         let rooms = [];
-        
+
         if (firebaseInitialized) {
             const snapshot = await db.collection('callRooms').get();
             snapshot.forEach(doc => {
                 const data = doc.data();
-                let createdAt = data.createdAt;
-                if (createdAt && typeof createdAt.toDate === 'function') {
-                    createdAt = createdAt.toDate().toISOString();
-                } else if (createdAt && createdAt._seconds) {
-                    createdAt = new Date(createdAt._seconds * 1000).toISOString();
-                } else if (!createdAt) {
-                    createdAt = new Date().toISOString();
-                }
-                rooms.push({ id: doc.id, ...data, createdAt });
+                rooms.push({
+                    id: doc.id, ...data,
+                    createdAt: toISOString(data.createdAt)
+                });
             });
         } else {
             rooms = Object.values(memoryDB.callRooms || {});
         }
-        
+
         const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
         rooms = rooms.filter(r => {
             const time = new Date(r.createdAt).getTime();
             return isNaN(time) || time > oneDayAgo;
         });
-        
+
         rooms.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         res.json(rooms);
     } catch (error) {
@@ -810,7 +847,7 @@ app.delete('/api/calls/rooms/:id', async (req, res) => {
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
         const roomId = req.params.id;
-        
+
         if (firebaseInitialized) {
             const doc = await db.collection('callRooms').doc(roomId).get();
             if (!doc.exists) return res.status(404).json({ error: 'Комната не найдена' });
@@ -819,7 +856,7 @@ app.delete('/api/calls/rooms/:id', async (req, res) => {
                 return res.status(403).json({ error: 'Нет прав' });
             }
             await db.collection('callRooms').doc(roomId).delete();
-            
+
             const signals = await db.collection('callSignals').where('roomId', '==', roomId).get();
             signals.forEach(async (s) => await s.ref.delete());
         } else {
@@ -831,7 +868,7 @@ app.delete('/api/calls/rooms/:id', async (req, res) => {
             delete memoryDB.callRooms[roomId];
             memoryDB.callSignals = memoryDB.callSignals.filter(s => s.roomId !== roomId);
         }
-        
+
         res.json({ success: true });
     } catch (error) {
         console.error('Ошибка удаления комнаты:', error);
@@ -845,9 +882,9 @@ app.post('/api/calls/signal', async (req, res) => {
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
         const { roomId, type, data, to } = req.body;
-        
+
         const signalId = `${roomId}_${decoded.username}_${type}_${to || 'all'}`;
-        
+
         const signal = {
             roomId,
             from: decoded.username,
@@ -857,11 +894,10 @@ app.post('/api/calls/signal', async (req, res) => {
             createdAt: new Date(),
             updatedAt: new Date()
         };
-        
+
         if (firebaseInitialized) {
             const docRef = db.collection('callSignals').doc(signalId);
             const doc = await docRef.get();
-            
             if (doc.exists) {
                 await docRef.update({
                     data: signal.data,
@@ -874,13 +910,12 @@ app.post('/api/calls/signal', async (req, res) => {
         } else {
             signal.createdAt = Date.now();
             signal.updatedAt = Date.now();
-            
-            memoryDB.callSignals = memoryDB.callSignals.filter(s => 
+            memoryDB.callSignals = memoryDB.callSignals.filter(s =>
                 !(s.roomId === roomId && s.from === decoded.username && s.type === type && (s.to || null) === (to || null))
             );
             memoryDB.callSignals.push(signal);
         }
-        
+
         res.json({ success: true });
     } catch (error) {
         console.error('Ошибка отправки сигнала:', error);
@@ -895,33 +930,26 @@ app.get('/api/calls/signal/:roomId', async (req, res) => {
         const decoded = jwt.verify(token, JWT_SECRET);
         const { roomId } = req.params;
         const { lastTime } = req.query;
-        
+
         let signals = [];
-        
+
         if (firebaseInitialized) {
             const snapshot = await db.collection('callSignals')
                 .where('roomId', '==', roomId).get();
-            
+
             const oneMinuteAgo = Date.now() - 60000;
             snapshot.forEach(doc => {
                 const s = { id: doc.id, ...doc.data() };
-                
-                let createdAt = s.createdAt;
-                if (createdAt && typeof createdAt.toDate === 'function') {
-                    createdAt = createdAt.toDate().getTime();
-                } else if (createdAt && createdAt._seconds) {
-                    createdAt = createdAt._seconds * 1000;
-                } else if (typeof createdAt === 'number') {
-                    // уже число
-                } else {
-                    createdAt = Date.now();
-                }
-                
+
+                const createdAt = s.updatedAt && typeof s.updatedAt.toDate === 'function'
+                    ? s.updatedAt.toDate().getTime()
+                    : (s.updatedAt?._seconds ? s.updatedAt._seconds * 1000 : Date.now());
+
                 if (createdAt < oneMinuteAgo) {
                     doc.ref.delete();
                     return;
                 }
-                
+
                 if ((s.to === null || s.to === decoded.username) && s.from !== decoded.username) {
                     if (!lastTime || createdAt > parseInt(lastTime)) {
                         signals.push({ ...s, createdAt });
@@ -931,15 +959,15 @@ app.get('/api/calls/signal/:roomId', async (req, res) => {
         } else {
             const oneMinuteAgo = Date.now() - 60000;
             memoryDB.callSignals = memoryDB.callSignals.filter(s => s.updatedAt > oneMinuteAgo);
-            
-            signals = memoryDB.callSignals.filter(s => 
-                s.roomId === roomId && 
+
+            signals = memoryDB.callSignals.filter(s =>
+                s.roomId === roomId &&
                 s.from !== decoded.username &&
                 (s.to === null || s.to === decoded.username) &&
                 (!lastTime || s.updatedAt > parseInt(lastTime))
             );
         }
-        
+
         res.json(signals);
     } catch (error) {
         console.error('Ошибка получения сигналов:', error);
@@ -947,22 +975,30 @@ app.get('/api/calls/signal/:roomId', async (req, res) => {
     }
 });
 
+// ============================================================
 // ============ 📚 КАТЕГОРИИ ============
+// ============================================================
 
 app.get('/api/categories', async (req, res) => {
     const token = req.cookies.token;
     if (!token) return res.status(401).json({ error: 'Не авторизован' });
     try {
         jwt.verify(token, JWT_SECRET);
-        
+
         let categories = [];
         if (firebaseInitialized) {
             const snapshot = await db.collection('categories').orderBy('createdAt', 'asc').get();
-            snapshot.forEach(doc => categories.push({ id: doc.id, ...doc.data() }));
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                categories.push({
+                    id: doc.id, ...data,
+                    createdAt: toISOString(data.createdAt)
+                });
+            });
         } else {
             categories = Object.values(memoryDB.categories || {});
         }
-        
+
         if (categories.length === 0) {
             const defaults = ['Механика', 'Термодинамика', 'Электричество', 'Оптика', 'Квантовая физика', 'Астрономия', 'Другое'];
             for (const name of defaults) {
@@ -970,14 +1006,14 @@ app.get('/api/categories', async (req, res) => {
                     const docRef = await db.collection('categories').add({
                         name, createdAt: new Date()
                     });
-                    categories.push({ id: docRef.id, name, createdAt: new Date() });
+                    categories.push({ id: docRef.id, name, createdAt: new Date().toISOString() });
                 }
             }
         }
-        
+
         res.json(categories);
     } catch (error) {
-        console.error('Ошибка получения категорий:', error);
+        console.error('Ошибка категорий:', error);
         res.status(500).json({ error: 'Ошибка сервера' });
     }
 });
@@ -990,14 +1026,14 @@ app.post('/api/categories', async (req, res) => {
         if (decoded.role !== 'admin') {
             return res.status(403).json({ error: 'Доступ только для администратора' });
         }
-        
+
         const { name } = req.body;
         if (!name || !name.trim()) {
             return res.status(400).json({ error: 'Введите название' });
         }
-        
+
         const trimmedName = name.trim();
-        
+
         let exists = false;
         if (firebaseInitialized) {
             const snapshot = await db.collection('categories')
@@ -1006,17 +1042,17 @@ app.post('/api/categories', async (req, res) => {
         } else {
             exists = Object.values(memoryDB.categories || {}).some(c => c.name === trimmedName);
         }
-        
+
         if (exists) {
             return res.status(400).json({ error: 'Такая категория уже есть' });
         }
-        
+
         const newCategory = {
             name: trimmedName,
             createdAt: new Date(),
             createdBy: decoded.username
         };
-        
+
         let created;
         if (firebaseInitialized) {
             const docRef = await db.collection('categories').add(newCategory);
@@ -1027,7 +1063,7 @@ app.post('/api/categories', async (req, res) => {
             if (!memoryDB.categories) memoryDB.categories = {};
             memoryDB.categories[id] = created;
         }
-        
+
         console.log(`📚 Создана категория: ${trimmedName}`);
         res.json({ success: true, category: created });
     } catch (error) {
@@ -1044,15 +1080,15 @@ app.delete('/api/categories/:id', async (req, res) => {
         if (decoded.role !== 'admin') {
             return res.status(403).json({ error: 'Доступ только для администратора' });
         }
-        
+
         const catId = req.params.id;
-        
+
         if (firebaseInitialized) {
             await db.collection('categories').doc(catId).delete();
         } else {
             if (memoryDB.categories) delete memoryDB.categories[catId];
         }
-        
+
         res.json({ success: true });
     } catch (error) {
         console.error('Ошибка удаления категории:', error);
@@ -1060,7 +1096,9 @@ app.delete('/api/categories/:id', async (req, res) => {
     }
 });
 
+// ============================================================
 // ============ 📚 ОБУЧЕНИЕ ============
+// ============================================================
 
 app.post('/api/lessons', async (req, res) => {
     const token = req.cookies.token;
@@ -1068,10 +1106,10 @@ app.post('/api/lessons', async (req, res) => {
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
         if (decoded.role !== 'admin') return res.status(403).json({ error: 'Доступ только для администратора' });
-        
+
         const { title, category, content, formulas, examples, image, linkedTestIds } = req.body;
         if (!title || !content) return res.status(400).json({ error: 'Нужны заголовок и содержание' });
-        
+
         const lesson = {
             title,
             category: category || 'Другое',
@@ -1083,7 +1121,7 @@ app.post('/api/lessons', async (req, res) => {
             createdBy: decoded.username,
             createdAt: new Date()
         };
-        
+
         let created;
         if (firebaseInitialized) {
             const docRef = await db.collection('lessons').add(lesson);
@@ -1093,7 +1131,7 @@ app.post('/api/lessons', async (req, res) => {
             created = { id: lessonId, ...lesson };
             memoryDB.lessons[lessonId] = created;
         }
-        
+
         console.log(`📚 Создана статья: ${title}`);
         res.json({ success: true, lesson: created });
     } catch (error) {
@@ -1107,26 +1145,25 @@ app.get('/api/lessons', async (req, res) => {
     if (!token) return res.status(401).json({ error: 'Не авторизован' });
     try {
         jwt.verify(token, JWT_SECRET);
-        
+
         let lessons = [];
         if (firebaseInitialized) {
             const snapshot = await db.collection('lessons').get();
             snapshot.forEach(doc => {
                 const data = doc.data();
-                let createdAt = data.createdAt;
-                if (createdAt && typeof createdAt.toDate === 'function') {
-                    createdAt = createdAt.toDate().toISOString();
-                }
-                lessons.push({ id: doc.id, ...data, createdAt });
+                lessons.push({
+                    id: doc.id, ...data,
+                    createdAt: toISOString(data.createdAt)
+                });
             });
         } else {
             lessons = Object.values(memoryDB.lessons || {});
         }
-        
+
         lessons.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         res.json(lessons);
     } catch (error) {
-        console.error('Ошибка получения статей:', error);
+        console.error('Ошибка статей:', error);
         res.status(500).json({ error: 'Ошибка сервера' });
     }
 });
@@ -1136,26 +1173,25 @@ app.get('/api/lessons/:id', async (req, res) => {
     if (!token) return res.status(401).json({ error: 'Не авторизован' });
     try {
         jwt.verify(token, JWT_SECRET);
-        
+
         let lesson = null;
         if (firebaseInitialized) {
             const doc = await db.collection('lessons').doc(req.params.id).get();
             if (doc.exists) {
                 const data = doc.data();
-                let createdAt = data.createdAt;
-                if (createdAt && typeof createdAt.toDate === 'function') {
-                    createdAt = createdAt.toDate().toISOString();
-                }
-                lesson = { id: doc.id, ...data, createdAt };
+                lesson = {
+                    id: doc.id, ...data,
+                    createdAt: toISOString(data.createdAt)
+                };
             }
         } else {
             lesson = memoryDB.lessons[req.params.id] || null;
         }
-        
+
         if (!lesson) return res.status(404).json({ error: 'Статья не найдена' });
         res.json(lesson);
     } catch (error) {
-        console.error('Ошибка получения статьи:', error);
+        console.error('Ошибка статьи:', error);
         res.status(500).json({ error: 'Ошибка сервера' });
     }
 });
@@ -1166,10 +1202,10 @@ app.put('/api/lessons/:id', async (req, res) => {
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
         if (decoded.role !== 'admin') return res.status(403).json({ error: 'Доступ только для администратора' });
-        
+
         const { title, category, content, formulas, examples, image, linkedTestIds } = req.body;
         const lessonId = req.params.id;
-        
+
         const updatedLesson = {
             title,
             category: category || 'Другое',
@@ -1180,7 +1216,7 @@ app.put('/api/lessons/:id', async (req, res) => {
             linkedTestIds: Array.isArray(linkedTestIds) ? linkedTestIds : [],
             updatedAt: new Date()
         };
-        
+
         if (firebaseInitialized) {
             const doc = await db.collection('lessons').doc(lessonId).get();
             if (!doc.exists) return res.status(404).json({ error: 'Статья не найдена' });
@@ -1191,7 +1227,7 @@ app.put('/api/lessons/:id', async (req, res) => {
             }
             memoryDB.lessons[lessonId] = { ...memoryDB.lessons[lessonId], ...updatedLesson };
         }
-        
+
         res.json({ success: true });
     } catch (error) {
         console.error('Ошибка обновления статьи:', error);
@@ -1205,15 +1241,15 @@ app.delete('/api/lessons/:id', async (req, res) => {
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
         if (decoded.role !== 'admin') return res.status(403).json({ error: 'Доступ только для администратора' });
-        
+
         const lessonId = req.params.id;
-        
+
         if (firebaseInitialized) {
             await db.collection('lessons').doc(lessonId).delete();
         } else {
             delete memoryDB.lessons[lessonId];
         }
-        
+
         res.json({ success: true });
     } catch (error) {
         console.error('Ошибка удаления статьи:', error);
@@ -1221,23 +1257,25 @@ app.delete('/api/lessons/:id', async (req, res) => {
     }
 });
 
+// ============================================================
 // ============ 📍 ГЕОЛОКАЦИЯ ============
+// ============================================================
 
 app.post('/api/location', async (req, res) => {
     const token = req.cookies.token;
     if (!token) return res.status(401).json({ error: 'Не авторизован' });
-    
+
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
         const { latitude, longitude, accuracy } = req.body;
-        
+
         if (!latitude || !longitude) {
             return res.status(400).json({ error: 'Нет координат' });
         }
-        
+
         const today = new Date().toISOString().split('T')[0];
         const docId = `${decoded.username}_${today}`;
-        
+
         const locationData = {
             username: decoded.username,
             date: today,
@@ -1247,21 +1285,21 @@ app.post('/api/location', async (req, res) => {
             updatedAt: new Date(),
             visits: 1
         };
-        
+
         if (firebaseInitialized) {
             const oldDocs = await db.collection('userLocations')
                 .where('username', '==', decoded.username)
                 .get();
-            
+
             for (const doc of oldDocs.docs) {
                 if (doc.id !== docId) {
                     await doc.ref.delete();
                 }
             }
-            
+
             const docRef = db.collection('userLocations').doc(docId);
             const doc = await docRef.get();
-            
+
             if (doc.exists) {
                 const existing = doc.data();
                 await docRef.update({
@@ -1271,20 +1309,18 @@ app.post('/api/location', async (req, res) => {
                     updatedAt: new Date(),
                     visits: (existing.visits || 0) + 1
                 });
-                console.log(`📍 Обновлена геолокация ${decoded.username}: ${latitude}, ${longitude}`);
             } else {
                 await docRef.set(locationData);
-                console.log(`📍 Новая геолокация ${decoded.username}: ${latitude}, ${longitude}`);
             }
         } else {
             if (!memoryDB.userLocations) memoryDB.userLocations = {};
-            
+
             for (const key of Object.keys(memoryDB.userLocations)) {
                 if (memoryDB.userLocations[key].username === decoded.username && key !== docId) {
                     delete memoryDB.userLocations[key];
                 }
             }
-            
+
             if (memoryDB.userLocations[docId]) {
                 memoryDB.userLocations[docId].latitude = latitude;
                 memoryDB.userLocations[docId].longitude = longitude;
@@ -1295,7 +1331,7 @@ app.post('/api/location', async (req, res) => {
                 memoryDB.userLocations[docId] = locationData;
             }
         }
-        
+
         res.json({ success: true, docId });
     } catch (error) {
         console.error('Ошибка геолокации:', error);
@@ -1306,43 +1342,51 @@ app.post('/api/location', async (req, res) => {
 app.get('/api/admin/locations', async (req, res) => {
     const token = req.cookies.token;
     if (!token) return res.status(401).json({ error: 'Не авторизован' });
-    
+
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
         if (decoded.role !== 'admin') {
             return res.status(403).json({ error: 'Доступ только для администратора' });
         }
-        
+
         let locations = [];
-        
+
         if (firebaseInitialized) {
             const snapshot = await db.collection('userLocations')
                 .orderBy('updatedAt', 'desc')
                 .limit(100)
                 .get();
-            snapshot.forEach(doc => locations.push({ id: doc.id, ...doc.data() }));
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                locations.push({
+                    id: doc.id, ...data,
+                    updatedAt: toISOString(data.updatedAt)
+                });
+            });
         } else {
             locations = Object.values(memoryDB.userLocations || {});
         }
-        
+
         res.json(locations);
     } catch (error) {
-        console.error('Ошибка получения геолокаций:', error);
+        console.error('Ошибка геолокаций:', error);
         res.status(500).json({ error: 'Ошибка сервера' });
     }
 });
 
+// ============================================================
 // ============ 📢 УВЕДОМЛЕНИЯ ============
+// ============================================================
 
 app.get('/api/notifications', async (req, res) => {
     const token = req.cookies.token;
     if (!token) return res.status(401).json({ error: 'Не авторизован' });
-    
+
     try {
         jwt.verify(token, JWT_SECRET);
-        
+
         let feed = [];
-        
+
         if (firebaseInitialized) {
             const feedDoc = await db.collection('notification_feed').doc('current').get();
             if (feedDoc.exists) {
@@ -1351,12 +1395,17 @@ app.get('/api/notifications', async (req, res) => {
         } else {
             feed = memoryDB.notificationFeed || [];
         }
-        
+
+        feed = feed.map(n => ({
+            ...n,
+            createdAt: toISOString(n.createdAt)
+        }));
+
         feed.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-        
+
         res.json({ notifications: feed, unreadCount: 0 });
     } catch (error) {
-        console.error('Ошибка получения уведомлений:', error);
+        console.error('Ошибка уведомлений:', error);
         res.status(500).json({ error: 'Ошибка сервера' });
     }
 });
@@ -1369,7 +1418,51 @@ app.delete('/api/notifications/:id', async (req, res) => {
     res.json({ success: true });
 });
 
-// ============ 🧹 ЕЖЕДНЕВНАЯ ОЧИСТКА ============
+// ============================================================
+// ============ 🎮 ИНТЕГРАЦИЯ СО СТРАТЕГИЕЙ ============
+// ============================================================
+
+// 1. Возвращаем конфиг клиенту
+app.get('/api/https://mrnerds-stratege.onrender.com/config', (req, res) => {
+    const token = req.cookies.token;
+    if (!token) return res.status(401).json({ error: 'Не авторизован' });
+
+    try {
+        jwt.verify(token, JWT_SECRET);
+        res.json({
+            url: STRATEGY_URL,
+            pingEndpoint: `${STRATEGY_URL}/api/ping`
+        });
+    } catch (e) {
+        res.status(401).json({ error: 'Не авторизован' });
+    }
+});
+
+// 2. Прокси-пинг Render (чтобы не было CORS)
+app.get('/api/https://mrnerds-stratege.onrender.com/ping', async (req, res) => {
+    try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
+
+        const response = await fetch(`${STRATEGY_URL}/api/ping`, {
+            signal: controller.signal
+        });
+        clearTimeout(timeout);
+
+        if (response.ok) {
+            const data = await response.json();
+            res.json({ awake: true, ...data });
+        } else {
+            res.json({ awake: false, status: response.status });
+        }
+    } catch (err) {
+        res.json({ awake: false, error: err.message });
+    }
+});
+
+// ============================================================
+// ============ 🧹 АВТООЧИСТКА ============
+// ============================================================
 
 async function runCleanup() {
     console.log('🧹 Запуск автоочистки...');
@@ -1377,9 +1470,9 @@ async function runCleanup() {
     const oneHourAgo = now - 60 * 60 * 1000;
     const oneDayAgo = now - 24 * 60 * 60 * 1000;
     const today = new Date().toISOString().split('T')[0];
-    
+
     try {
-        // ===== 1. СИГНАЛЫ старше 1 часа =====
+        // 1. СИГНАЛЫ старше 1 часа
         let signalsDeleted = 0;
         if (firebaseInitialized) {
             const signals = await db.collection('callSignals').get();
@@ -1391,7 +1484,7 @@ async function runCleanup() {
                 } else if (createdAt && createdAt._seconds) {
                     createdAt = createdAt._seconds * 1000;
                 } else if (typeof createdAt === 'number') {
-                    // уже число
+                    // OK
                 } else {
                     createdAt = now;
                 }
@@ -1406,28 +1499,21 @@ async function runCleanup() {
             signalsDeleted = before - memoryDB.callSignals.length;
         }
         console.log(`   ✅ Сигналов удалено: ${signalsDeleted}`);
-        
-        // ===== 2. УВЕДОМЛЕНИЯ =====
+
+        // 2. УВЕДОМЛЕНИЯ
         let notifsDeleted = 0;
         if (firebaseInitialized) {
             const feedRef = db.collection('notification_feed').doc('current');
             const feedDoc = await feedRef.get();
-            
             if (feedDoc.exists) {
                 const feed = feedDoc.data().items || [];
                 const filtered = feed.filter(n => {
                     const t = new Date(n.createdAt).getTime();
                     return t > oneDayAgo;
                 }).slice(0, 20);
-                
                 notifsDeleted = feed.length - filtered.length;
-                
-                await feedRef.set({
-                    items: filtered,
-                    updatedAt: new Date()
-                });
+                await feedRef.set({ items: filtered, updatedAt: new Date() });
             }
-            
             const oldNotifs = await db.collection('notifications').get();
             for (const doc of oldNotifs.docs) {
                 await doc.ref.delete();
@@ -1443,31 +1529,27 @@ async function runCleanup() {
             memoryDB.notificationFeed = filtered;
         }
         console.log(`   ✅ Уведомлений удалено: ${notifsDeleted}`);
-        
-        // ===== 3. ЛОКАЦИИ =====
+
+        // 3. ЛОКАЦИИ
         let locationsDeleted = 0;
         if (firebaseInitialized) {
             const locations = await db.collection('userLocations').get();
-            
             const byUser = {};
             for (const doc of locations.docs) {
                 const l = doc.data();
                 if (!byUser[l.username]) byUser[l.username] = [];
                 byUser[l.username].push({ id: doc.id, ...l, ref: doc.ref });
             }
-            
             for (const username of Object.keys(byUser)) {
                 const userLocs = byUser[username];
                 const todayLocs = userLocs.filter(l => l.date === today);
                 const toDelete = userLocs.filter(l => l.date !== today);
-                
                 if (todayLocs.length > 1) {
                     todayLocs.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
                     for (let i = 1; i < todayLocs.length; i++) {
                         toDelete.push(todayLocs[i]);
                     }
                 }
-                
                 for (const loc of toDelete) {
                     await loc.ref.delete();
                     locationsDeleted++;
@@ -1480,19 +1562,16 @@ async function runCleanup() {
                 if (!byUser[l.username]) byUser[l.username] = [];
                 byUser[l.username].push({ key, ...l });
             }
-            
             for (const username of Object.keys(byUser)) {
                 const userLocs = byUser[username];
                 const todayLocs = userLocs.filter(l => l.date === today);
                 const toDelete = userLocs.filter(l => l.date !== today);
-                
                 if (todayLocs.length > 1) {
                     todayLocs.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
                     for (let i = 1; i < todayLocs.length; i++) {
                         toDelete.push(todayLocs[i]);
                     }
                 }
-                
                 for (const loc of toDelete) {
                     delete memoryDB.userLocations[loc.key];
                     locationsDeleted++;
@@ -1500,8 +1579,8 @@ async function runCleanup() {
             }
         }
         console.log(`   ✅ Локаций удалено: ${locationsDeleted}`);
-        
-        // ===== 4. КОМНАТЫ =====
+
+        // 4. КОМНАТЫ ЗВОНКОВ
         let roomsDeleted = 0;
         if (firebaseInitialized) {
             const rooms = await db.collection('callRooms').get();
@@ -1534,7 +1613,7 @@ async function runCleanup() {
             }
         }
         console.log(`   ✅ Комнат удалено: ${roomsDeleted}`);
-        
+
         console.log('🧹 Автоочистка завершена');
     } catch (err) {
         console.error('❌ Ошибка автоочистки:', err);
@@ -1542,78 +1621,86 @@ async function runCleanup() {
 }
 
 function scheduleCleanup() {
-    // 🔥 На Vercel setInterval НЕ работает (serverless)
     if (IS_VERCEL) {
-        console.log('⏰ Автоочистка отключена (Vercel / production)');
+        console.log('⏰ Автоочистка отключена (Vercel)');
         return;
     }
-    
+
     if (cleanupInterval) clearInterval(cleanupInterval);
-    
+
     cleanupInterval = setInterval(async () => {
         const now = new Date();
         const utcHour = now.getUTCHours();
         const utcMinute = now.getUTCMinutes();
         const mskHour = (utcHour + MSK_OFFSET_HOURS) % 24;
-        
+
         if (mskHour === CLEANUP_HOUR_MSK && utcMinute === 0) {
             const lastRun = global.__lastCleanupRun;
             const today = now.toISOString().split('T')[0];
             if (lastRun === today) return;
             global.__lastCleanupRun = today;
-            
-            console.log(`⏰ 12:00 МСК — запуск ежедневной очистки`);
+
+            console.log(`⏰ 12:00 МСК — ежедневная очистка`);
             await runCleanup();
         }
     }, 60 * 1000);
-    
-    console.log(`⏰ Автоочистка запланирована на 12:00 МСК (09:00 UTC) каждый день`);
+
+    console.log(`⏰ Автоочистка: 12:00 МСК ежедневно`);
 }
 
+// ============================================================
 // ============ СТАТИЧЕСКИЕ ФАЙЛЫ ============
+// ============================================================
 
 app.get('/style.css', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'style.css'));
+    res.sendFile(path.join(process.cwd(), 'public', 'style.css'));
 });
 
 app.get('/admin.css', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'admin.css'));
+    res.sendFile(path.join(process.cwd(), 'public', 'admin.css'));
 });
 
 app.get('/script.js', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'script.js'));
+    res.sendFile(path.join(process.cwd(), 'public', 'script.js'));
 });
 
 app.get('/admin.js', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'admin.js'));
+    res.sendFile(path.join(process.cwd(), 'public', 'admin.js'));
 });
 
 app.get('/favicon.ico', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'favicon.ico'));
+    res.sendFile(path.join(process.cwd(), 'public', 'favicon.ico'));
 });
 
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    res.sendFile(path.join(process.cwd(), 'public', 'index.html'));
 });
 
 app.get('/admin', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+    res.sendFile(path.join(process.cwd(), 'public', 'admin.html'));
 });
 
 app.get('/api/test', (req, res) => {
-    res.json({ 
-        status: 'ok', 
+    res.json({
+        status: 'ok',
         firebase: firebaseInitialized ? 'connected' : 'not connected',
         messaging: messaging ? 'ready' : 'not ready',
-        vercel: IS_VERCEL
+        vercel: IS_VERCEL,
+        strategy: STRATEGY_URL
     });
 });
 
+// Catch-all только для НЕ-API
 app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    if (req.path.startsWith('/api/')) {
+        return res.status(404).json({ error: 'Not found' });
+    }
+    res.sendFile(path.join(process.cwd(), 'public', 'index.html'));
 });
 
-// ============ 🔥 ЗАПУСК (РАБОТАЕТ И ЛОКАЛЬНО, И НА VERCEL) ============
+// ============================================================
+// ============ 🚀 ЗАПУСК ============
+// ============================================================
 
 async function initializeData() {
     try {
@@ -1621,16 +1708,16 @@ async function initializeData() {
         if (!adminExists) {
             const hashedPassword = await bcrypt.hash('admin123', 10);
             await createUser('admin', hashedPassword, 'admin');
-            console.log('✅ Создан администратор: admin / admin123');
+            console.log('✅ Создан админ: admin / admin123');
         }
-        
+
         const userExists = await getUser('user');
         if (!userExists) {
             const hashedPassword = await bcrypt.hash('user123', 10);
             await createUser('user', hashedPassword, 'user');
-            console.log('✅ Создан пользователь: user / user123');
+            console.log('✅ Создан user: user / user123');
         }
-        
+
         const existingTests = await getTests();
         if (existingTests.length === 0) {
             const testQuestions = [
@@ -1649,7 +1736,7 @@ async function initializeData() {
                     hint: 'Метр в секунду'
                 }
             ];
-            
+
             await createTest({
                 title: 'Основы физики',
                 description: 'Тест по основным формулам и понятиям физики',
@@ -1663,43 +1750,34 @@ async function initializeData() {
             console.log('✅ Тестовый тест создан');
         }
     } catch (err) {
-        console.error('❌ Ошибка инициализации данных:', err);
+        console.error('❌ Ошибка инициализации:', err);
     }
 }
 
-// 🔥 Главная логика
 if (IS_VERCEL) {
-    // ============ VERCEL ============
-    // НЕ вызываем app.listen()! Просто экспортируем app.
-    // Инициализация данных при холодном старте (без блокировки)
     initializeData().catch(err => console.error('Init error:', err));
-    
-    // Автоочистка отключена (см. scheduleCleanup)
-    
     module.exports = app;
-    console.log('🚀 Server запущен на Vercel (serverless)');
+    console.log(`🚀 Server on Vercel | Strategy: ${STRATEGY_URL}`);
 } else {
-    // ============ ЛОКАЛЬНО / VPS ============
     (async () => {
         await initializeData();
         scheduleCleanup();
-        
+
         setTimeout(() => {
-            console.log('🧹 Первичная очистка при старте...');
-            runCleanup().catch(err => console.error('Ошибка первичной очистки:', err));
+            console.log('🧹 Первичная очистка...');
+            runCleanup().catch(err => console.error('Ошибка:', err));
         }, 5000);
-        
+
         app.listen(PORT, () => {
-            console.log(`\n🚀 Сервер запущен на http://localhost:${PORT}`);
-            console.log('\n👤 Доступные аккаунты:');
-            console.log('   📋 Администратор: admin / admin123');
-            console.log('   📋 Пользователь: user / user123');
-            console.log(`\n🌐 Откройте http://localhost:${PORT}`);
+            console.log(`\n🚀 http://localhost:${PORT}`);
+            console.log('\n👤 Аккаунты:');
+            console.log('   📋 admin / admin123');
+            console.log('   📋 user / user123');
+            console.log(`\n🎮 Стратегия: ${STRATEGY_URL}`);
             if (!firebaseInitialized) {
-                console.log('\n⚠️ Данные хранятся в памяти!');
+                console.log('\n⚠️ Данные в памяти!');
             } else {
-                console.log('✅ Данные сохраняются в Firebase');
-                console.log(`📱 Push-уведомления: ${messaging ? 'готовы' : 'не настроены'}`);
+                console.log('✅ Данные в Firebase');
             }
         });
     })();
